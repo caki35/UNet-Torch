@@ -1,0 +1,32 @@
+model_config:
+  model: UNet1 #the directory to which the results are saved
+  initial_filter_size: [16]
+  kernel: [3]
+  drop_out_rate: [0.25]
+  input_size: [512, 512] #h, w
+  channel: 1
+  num_class: 1
+  model_type: 'fourier1' #multi_task, attention, fourier1, fourier1_2, single
+  dropout: False
+train_config:
+  loss: BCE
+  accuracy: dice_score
+  optimizer: Radam
+  lr_rate: [0.0001]
+  weight_decay: [0]
+  batch_size: [8]
+  epochs: 150
+  num_workers: 20
+  use_cuda: True
+dataset_config:
+  train_path: '..//liver_dataset_processed_fourier//train'
+  val_path: '..//liver_dataset_processed_fourier//val'
+  test_path: '../liver_dataset_processed_fourier/test'
+  aug_rate: [0]
+  save_dir: exp9_fourier1_sum
+  class_names: ['background','liver']
+resume:
+  flag: False
+  path: exp7_fourier1/models/last_epoch.pt
+  epoch: 106
+
