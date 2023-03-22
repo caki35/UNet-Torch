@@ -3,27 +3,28 @@ model_config:
   initial_filter_size: [16]
   kernel: [3]
   drop_out_rate: [0.25]
-  input_size: [512, 512] #h, w
+  input_size: [512, 512]    #[1536, 1536] #h, w
   channel: 1
   num_class: 1
-  model_type: 'fourier1' #multi_task, attention, fourier1, fourier1_2, single
+  model_type: 'fourier1_2' #multi_task, attention, fourier1, fourier1_2, single
   dropout: False
+  anydepth: True
 train_config:
   loss: BCE
   accuracy: dice_score
   optimizer: Radam
   lr_rate: [0.0001]
   weight_decay: [0]
-  batch_size: [8]
-  epochs: 150
+  batch_size: [4]
+  epochs: 30
   num_workers: 20
   use_cuda: True
 dataset_config:
-  train_path: '..//liver_dataset_processed_fourier//train'
-  val_path: '..//liver_dataset_processed_fourier//val'
-  test_path: '../liver_dataset_processed_fourier/test'
+  train_path: '/home/caki/desktop/projects/liver/liver_dataset_processed_fourier/train/'
+  val_path: '/home/caki/desktop/projects/liver/liver_dataset_processed_fourier/val/'
+  test_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/test'
   aug_rate: [0]
-  save_dir: exp9_fourier1_sum
+  save_dir: exp2
   class_names: ['background','liver']
 resume:
   flag: False

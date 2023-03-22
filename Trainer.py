@@ -21,7 +21,10 @@ class Trainer():
         self.best_loss = 1e15
         self.phases = ["train", "val"]
         self.best_model = []
-        self.best_val_score = 0
+        if accuracy_metric in ['dice_score']:
+            self.best_val_score = 0
+        else:
+            self.best_val_score = 1e15
         self.batch_size = batch_size
         self.output_save_dir = output_save_dir
         self.dtype = dtype
@@ -32,13 +35,12 @@ class Trainer():
         self.val_loss_list = []
         self.val_score_list = []
         self.model_type = model_type
-        
+
         self.train_loss_list_1 = []
         self.val_loss_list_1 = []
 
         self.train_loss_list_2 = []
         self.val_loss_list_2 = []
-
 
     def plot_loss_functions(self, name):
         plt.figure(figsize=(8, 4))
@@ -49,7 +51,7 @@ class Trainer():
         plt.plot(np.arange(len(self.val_loss_list)),
                  self.val_loss_list, label='val loss')
         plt.plot(np.arange(len(self.val_score_list)),
-                 self.val_score_list, label='val accuracy',color ='red')
+                 self.val_score_list, label='val accuracy', color='red')
         plt.grid(True)
         plt.legend()
         plt.savefig(os.path.join(self.output_save_dir, '{}.png'.format(name)))
@@ -65,7 +67,8 @@ class Trainer():
                      self.val_loss_list_1, label='val loss')
             plt.grid(True)
             plt.legend()
-            plt.savefig(os.path.join(self.output_save_dir, '{}.png'.format('bce')))
+            plt.savefig(os.path.join(
+                self.output_save_dir, '{}.png'.format('bce')))
             plt.cla()
 
         if self.train_loss_list_2:
@@ -85,7 +88,7 @@ class Trainer():
     def train(self):
         if self.model_type == 'single':
             self.singe_train()
-        
+
         elif self.model_type == 'multi_task':
             self.multi_task_train()
 
@@ -107,6 +110,8 @@ class Trainer():
         log_file = os.path.join(self.output_save_dir, "logs.txt")
 
         file = open(log_file, 'a')
+
+        total_memory = f'{torch.cuda.get_device_properties(0).total_memory/ 1E9 if torch.cuda.is_available() else 0:.3g}G'
 
         for epoch in range(self.start_epoch, self.num_epochs+1):
 
@@ -147,23 +152,25 @@ class Trainer():
                         with torch.set_grad_enabled(phase == 'train'):
 
                             output_mask = self.model(inputs)
-
                             loss = calc_loss(output_mask, label_mask,
                                              loss_type=self.loss_function)
 
+                            reserved = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'
+                            mem = reserved + '/' + total_memory
                             # backward + optimize only if in training phase
                             if phase == 'train':
                                 loss.backward()
                                 self.optimizer.step()
                                 epoch_loss += loss.item()
-                                tbar.set_postfix(loss=epoch_loss/batch_step)
 
+                                tbar.set_postfix(
+                                    loss=epoch_loss/batch_step, memory=mem)
                             else:
                                 epoch_loss += loss.item()
                                 val_score += calc_loss(output_mask, label_mask,
-                                                    loss_type=self.accuracy_metric)
+                                                       loss_type=self.accuracy_metric)
                                 tbar.set_postfix(loss=epoch_loss/batch_step,
-                                                 accuracy=(val_score.item()/(batch_step)))
+                                                 accuracy=(val_score.item()/(batch_step)), memory=mem)
 
                 epoch_loss /= batch_step
                 # deep copy the model
@@ -182,7 +189,7 @@ class Trainer():
                     file.write((f"Val score on epoch {epoch}: {val_score}"))
 
                     file.write("\n")
-                    if val_score >= self.best_val_score:
+                    if val_score > self.best_val_score:
                         self.best_val_score = val_score
                         print("saving best model")
                         file.write("saving best model")
@@ -225,7 +232,7 @@ class Trainer():
         self.plot_loss_functions('total')
 
         return self.model
-    
+
     def multi_task_train(self):
         if not os.path.exists(self.output_save_dir):
             os.mkdir(self.output_save_dir)
@@ -271,11 +278,13 @@ class Trainer():
                 batch_step = 0
                 with tqdm(self.dataloader[phase], unit="batch") as tbar:
                     for inputs, label_mask, label_fdmap in tbar:
-                
+
                         batch_step += 1
                         inputs = inputs.to(self.device).type(self.dtype)
-                        label_mask = label_mask.to(self.device).type(self.dtype)
-                        label_dist = label_dist.to(self.device).type(self.dtype)
+                        label_mask = label_mask.to(
+                            self.device).type(self.dtype)
+                        label_dist = label_dist.to(
+                            self.device).type(self.dtype)
 
                         # zero the parameter gradients
                         self.optimizer.zero_grad()
@@ -287,14 +296,14 @@ class Trainer():
 
                             # binary classification
                             loss1 = calc_loss(output_mask, label_mask,
-                                            loss_type=self.loss_function)
+                                              loss_type=self.loss_function)
 
-                            #regression
+                            # regression
                             amin = torch.amin(output_dist, dim=(-2, -1))
                             output_dist = torch.sub(output_dist, amin.reshape(
                                 (amin.shape[0], amin.shape[1], 1, 1)))
                             loss2 = calc_loss(output_dist, label_dist,
-                                            loss_type='mse')
+                                              loss_type='mse')
 
                             loss = loss_combiner(
                                 [loss1, loss2], [log_var_task1, log_var_task2])
@@ -314,7 +323,7 @@ class Trainer():
                             else:
                                 epoch_loss += loss.item()
                                 val_score += calc_loss(output_mask, label_mask,
-                                                    loss_type=self.accuracy_metric)
+                                                       loss_type=self.accuracy_metric)
                                 tbar.set_postfix(loss=epoch_loss/batch_step,
                                                  accuracy=(val_score.item()/(batch_step)), memory=mem)
                                 loss1_current_epoch += loss1.detach().item()
@@ -396,7 +405,7 @@ class Trainer():
         file = open(log_file, 'a')
 
         total_memory = f'{torch.cuda.get_device_properties(0).total_memory/ 1E9 if torch.cuda.is_available() else 0:.3g}G'
-        
+
         # log_var_task1 = torch.zeros((1,), requires_grad=True)
         # log_var_task2 = torch.zeros((1,), requires_grad=True)
         # params = ([p for p in self.model.parameters()] +
@@ -437,8 +446,10 @@ class Trainer():
                         tbar.set_description(f"Epoch {epoch}")
                         batch_step += 1
                         inputs = inputs.to(self.device).type(self.dtype)
-                        label_mask = label_mask.to(self.device).type(self.dtype)
-                        label_fdmap = label_fdmap.to(self.device).type(self.dtype)
+                        label_mask = label_mask.to(
+                            self.device).type(self.dtype)
+                        label_fdmap = label_fdmap.to(
+                            self.device).type(self.dtype)
 
                         # zero the parameter gradients
                         self.optimizer.zero_grad()
@@ -450,8 +461,8 @@ class Trainer():
                             output_mask, output_fdmap = self.model(inputs)
 
                             loss1 = calc_loss(output_mask, label_mask,
-                                            loss_type=self.loss_function)
-                            
+                                              loss_type=self.loss_function)
+
                             loss2 = calc_loss(output_fdmap, label_fdmap,
                                               loss_type='mse')
 
@@ -460,7 +471,7 @@ class Trainer():
                             #     [loss1, loss2], [log_var_task1, log_var_task2])
 
                             # straightforward way
-                            loss = loss1 + loss2 
+                            loss = loss1 + loss2
                             loss = loss.to(self.device)
 
                             reserved = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'
@@ -477,7 +488,7 @@ class Trainer():
                             else:
                                 epoch_loss += loss.item()
                                 val_score += calc_loss(output_mask, label_mask,
-                                                    loss_type=self.accuracy_metric)
+                                                       loss_type=self.accuracy_metric)
                                 tbar.set_postfix(loss=epoch_loss/batch_step,
                                                  accuracy=(val_score.item()/(batch_step)), memory=mem)
                                 loss1_current_epoch += loss1.detach().item()
@@ -549,7 +560,7 @@ class Trainer():
         self.plot_loss_functions('total')
 
         return self.model
-    
+
     def fourier1_2_train(self):
         self.best_model = copy.deepcopy(self.model.state_dict())
         if not os.path.exists(self.output_save_dir):
@@ -623,7 +634,7 @@ class Trainer():
 
                             loss2 = calc_loss(output_fdmap1, label_fdmap1,
                                               loss_type='mse')
-                            
+
                             loss3 = calc_loss(output_fdmap2, label_fdmap2,
                                               loss_type='mse')
 

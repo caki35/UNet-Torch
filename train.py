@@ -19,6 +19,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from Trainer import Trainer
 
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument('config', help='the config path')
@@ -50,7 +51,7 @@ def check_input(dataloaders, titles=["Input", 'Target']):
     val_loader = dataloaders['val']
     train_batch = next(iter(train_loader))
     val_batch = next(iter(val_loader))
-    
+
     if len(train_batch) == 3:
         img, target, dist = train_batch
         number_of_batch = img.shape[0]
@@ -61,7 +62,7 @@ def check_input(dataloaders, titles=["Input", 'Target']):
         grid_img2 = make_grid(target)
         grid_img3 = make_grid(dist)
         ulti = make_grid([grid_img1, grid_img2, grid_img3], nrow=1)
-        save_image(ulti,'train_batch.png')
+        save_image(ulti, 'train_batch.png')
 
         img, target, dist = val_batch
         number_of_batch = img.shape[0]
@@ -104,7 +105,6 @@ def check_input(dataloaders, titles=["Input", 'Target']):
         ulti = make_grid([grid_img1, grid_img2, grid_img3, grid_img4], nrow=1)
         save_image(ulti, 'val_batch.png')
 
-
     else:
         img, target = train_batch
         number_of_batch = img.shape[0]
@@ -128,8 +128,8 @@ def check_input(dataloaders, titles=["Input", 'Target']):
 def main(cfg):
 
     # model configs
-    input_size = (cfg['model_config']['input_size'][1],
-                  cfg['model_config']['input_size'][0])
+    input_size = (cfg['model_config']['input_size'][0],
+                  cfg['model_config']['input_size'][1])  # h, w
     num_class = cfg['model_config']['num_class']
     ch = cfg['model_config']['channel']
     initial_filter_size = cfg['model_config']['initial_filter_size'][0]
@@ -153,42 +153,47 @@ def main(cfg):
     val_path = cfg['dataset_config']['val_path']
     aug_rate = cfg['dataset_config']['aug_rate']
     output_save_dir = cfg['dataset_config']['save_dir']
+    anydepth = cfg['model_config']['anydepth']
 
-    
     if model_type == 'single':
         train_dataset = Data_Binary(
-            train_path, ch, input_size=input_size)
-        val_dataset = Data_Binary(val_path, ch, input_size=input_size)
+            train_path, ch, anydepth, input_size=input_size)
+        val_dataset = Data_Binary(
+            val_path, ch, anydepth, input_size=input_size)
 
         model = UNet(ch, num_class, initial_filter_size,
                      use_cuda, dropout, dropout_p)
-        
+
     elif model_type == 'multi_task':
         train_dataset = Data_Reg_Binary(
-                    train_path, ch, input_size=input_size)
-        val_dataset = Data_Reg_Binary(val_path, ch, input_size=input_size)
+            train_path, ch, anydepth, input_size=input_size)
+        val_dataset = Data_Reg_Binary(
+            val_path, ch, anydepth, input_size=input_size)
         model = UNet_multitask(ch, num_class, initial_filter_size, use_cuda)
 
     elif model_type == 'attention':
         train_dataset = Data_Binary(
-            train_path, ch, input_size=input_size)
-        val_dataset = Data_Binary(val_path, ch, input_size=input_size)
+            train_path, ch, anydepth, input_size=input_size)
+        val_dataset = Data_Binary(
+            val_path, ch, anydepth, input_size=input_size)
         model = UNet_attention(ch, num_class, initial_filter_size, use_cuda)
 
     elif model_type == 'fourier1':
         train_dataset = Data_Reg_Fourier1(
-            train_path, ch, input_size=input_size)
-        val_dataset = Data_Reg_Fourier1(val_path, ch, input_size=input_size)
+            train_path, ch, anydepth, input_size=input_size)
+        val_dataset = Data_Reg_Fourier1(
+            val_path, ch, anydepth, input_size=input_size)
         model = UNet_fourier1(ch, num_class, initial_filter_size, use_cuda)
     elif model_type == 'fourier1_2':
         train_dataset = Data_Reg_Fourier1_2(
-            train_path, ch, input_size=input_size)
-        val_dataset = Data_Reg_Fourier1_2(val_path, ch, input_size=input_size)
+            train_path, ch, anydepth, input_size=input_size)
+        val_dataset = Data_Reg_Fourier1_2(
+            val_path, ch, anydepth, input_size=input_size)
         model = UNet_fourier1_2(ch, num_class, initial_filter_size, use_cuda)
 
     else:
         raise ValueError('Invalid model_type "%s"' % model_type)
-    
+
     start_epoch = 1
     if cfg['resume']['flag']:
         model.load_state_dict(torch.load(cfg['resume']['path']))
@@ -220,13 +225,16 @@ def main(cfg):
     # optimizers
     optimizer = optim.Adam(
         model.parameters(), lr=lr_rate, weight_decay=weight_decay)
-    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', factor=0.5, patience=30, min_lr = 1e-5)
-
+    if accuracy_metric in ['dice_score']:
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='max', factor=0.5, patience=30, min_lr=1e-5)
+    else:
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.5, patience=30, min_lr=1e-5)
     trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
                       patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=lr_scheduler, start_epoch=start_epoch)
     best_model = trainer.train()
-    
+
 
 if __name__ == "__main__":
     args = parse_args()
