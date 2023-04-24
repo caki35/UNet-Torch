@@ -73,52 +73,25 @@ save_dir = 'res'
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
 
+class_names = {0: 'background', 1: 'red', 2: 'green', 3: 'blue', 4: 'yellow'}
 
-class Results:
-    def __init__(self, save_dir, class_names):
+
+class Results_mc:
+    def __init__(self, save_dir, num_of_class, tolerance=0):
         self.save_dir = save_dir
-        if not os.path.exists(self.save_dir):
-            os.mkdir(self.save_dir)
-        self.image_save_dir = os.path.join(self.save_dir, 'images')
-        if not os.path.exists(self.image_save_dir):
-            os.mkdir(self.image_save_dir)
-        self.tp_pw = 0
-        self.tn_pw = 0
-        self.fp_pw = 0
-        self.fn_pw = 0
-        self.class_names = class_names
-        self.result_dict = {}
-        for i in range(len(class_names)):
-            self.result_dict[i] = {}
-            self.result_dict[i]["iou"] = []
-            self.result_dict[i]["dice"] = []
-        self.background_iou = []
-        self.background_dice = []
-        self.seam_iou = []
-        self.seam_dice = []
+        self.tolerance = tolerance
+        self.num_of_class = num_of_class
+        self.class_result_dict = {}
+        for i in range(self.num_of_class):
+            self.class_result_dict[i] = {'precision': [], 'recall': [
+            ], 'f1': [], 'dice_score': [], 'iou_score': []}
 
-    def pixel_based_metrics(self, y_true, y_pred):
+    def compare(self, y_true, y_pred):
         """
         calculate metrics threating each pixel as a sample
         """
-        # true positives
-        tp_pp = np.sum((y_pred == 1) & (y_true == 1))
-        # true negatives
-        tn_pp = np.sum((y_pred == 0) & (y_true == 0))
-        # false positives
-        fp_pp = np.sum((y_pred == 1) & (y_true == 0))
-        # false negatives
-        fn_pp = np.sum((y_pred == 0) & (y_true == 1))
-
-        return tp_pp, tn_pp, fp_pp, fn_pp
-
-    def class_wise_metrics(self, y_true, y_pred):
-        class_wise_iou = []
-        class_wise_dice_score = []
-
-        smoothening_factor = 0.00001
-        for i in range(len(self.class_names)):
-
+        smoothening_factor = 1e-6
+        for i in range(self.num_of_class):
             intersection = np.sum((y_pred == i) * (y_true == i))
             y_true_area = np.sum((y_true == i))
             y_pred_area = np.sum((y_pred == i))
@@ -126,30 +99,56 @@ class Results:
 
             iou = (intersection + smoothening_factor) / \
                 (combined_area - intersection + smoothening_factor)
-            class_wise_iou.append(iou)
+            self.class_result_dict[i]['iou_score'].append(iou)
 
-            dice_score = 2 * ((intersection) /
+            dice_score = 2 * ((intersection + smoothening_factor) /
                               (combined_area + smoothening_factor))
-            class_wise_dice_score.append(dice_score)
+            self.class_result_dict[i]['dice_score'].append(dice_score)
 
-        return class_wise_iou, class_wise_dice_score
+            # true positives
+            tp_pp = np.sum((y_pred == i) & (y_true == i))
+            # true negatives
+            tn_pp = np.sum((y_pred == 0) & (y_true == 0))
+            # false positives
+            fp_pp = np.sum((y_pred == i) & (y_true != i))
+            # false negatives
+            fn_pp = np.sum((y_pred != i) & (y_true == i))
 
-    def compare(self, gt_binary_mask, predicted_binary_mask):
-        class_wise_iou, class_wise_dice_score = self.class_wise_metrics(
-            gt_mask, p)
+            self.class_result_dict[i]['precision'].append(
+                tp_pp / (tp_pp + fp_pp + smoothening_factor))
+            self.class_result_dict[i]['recall'].append(tp_pp / (tp_pp + fn_pp))
+            self.class_result_dict[i]['f1'].append(
+                2 * tp_pp / (2 * tp_pp + fp_pp + fn_pp))
 
-        for i in range(len(class_wise_iou)):
-            self.result_dict[i]['iou'].append(class_wise_iou[i])
-            self.result_dict[i]['dice'].append(class_wise_dice_score[i])
+    def calculate_metrics(self):
+        f = open(os.path.join(self.save_dir, 'result.txt'), 'w')
 
-        tp_pp, tn_pp, fp_pp, fn_pp = self.pixel_based_metrics(
-            gt_binary_mask, predicted_binary_mask)
-        self.tp_pw += tp_pp
-        self.tn_pw += tn_pp
-        self.fp_pw += fp_pp
-        self.fn_pw += fn_pp
+        f.write('Image-wise analysis:\n')
+
+        for i in range(self.num_of_class):
+            class_name = class_names[i]
+            f.write('{} \n'.format(class_name))
+            precision = round(sum(
+                self.class_result_dict[i]['precision'])/len(self.class_result_dict[i]['precision']), 3)
+            recall = round(sum(
+                self.class_result_dict[i]['recall'])/len(self.class_result_dict[i]['recall']), 3)
+            f1_score = round(
+                sum(self.class_result_dict[i]['f1'])/len(self.class_result_dict[i]['f1']), 3)
+            dice_score = round(sum(
+                self.class_result_dict[i]['dice_score'])/len(self.class_result_dict[i]['dice_score']), 3)
+            iou_based_image = round(sum(
+                self.class_result_dict[i]['iou_score'])/len(self.class_result_dict[i]['iou_score']), 3)
+
+            f.write('precision: {}\n'.format(precision))
+            f.write('recall: {}\n'.format(recall))
+            f.write('f1: {}\n'.format(f1_score))
+            f.write("Dice Score:"+str(dice_score)+'\n')
+            f.write("IOU Score:" + str(iou_based_image)+'\n')
+            f.write("\n")
+        f.close()
 
 
+results = Results_mc('res', 5)
 for img_path in tqdm(image_list):
     image_name = img_path.split('/')[-1]
     image_name = image_name[:image_name.rfind('')]
@@ -159,8 +158,6 @@ for img_path in tqdm(image_list):
     img = pre_process(img_org)
     outputs = model(img.to(device))
     probs = F.softmax(outputs, dim=1)
-    print(probs.shape)
-    print(probs.sum(1))
 
     probs = probs.data.cpu().numpy()
     # (shape: (batch_size, num_classes, img_h, img_w))
@@ -185,6 +182,8 @@ for img_path in tqdm(image_list):
     score2_img = score2.astype(np.uint8)
     score3_img = score3.astype(np.uint8)
     score4_img = score4.astype(np.uint8)
+
+    results.compare(mask, pred_label_imgs[0])
 
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(2, 2)
@@ -214,3 +213,4 @@ for img_path in tqdm(image_list):
     save_img_bin = np.hstack(
         [cv2.cvtColor(img_org, cv2.COLOR_GRAY2RGB), seperater, rgb_mask, seperater, rgb_mask_pred])
     cv2.imwrite(os.path.join(save_dir, image_name+'.png'), save_img_bin)
+results.calculate_metrics()

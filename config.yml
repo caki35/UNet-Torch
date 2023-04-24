@@ -1,33 +1,35 @@
 model_config:
   model: UNet1 #the directory to which the results are saved
-  initial_filter_size: [16]
+  initial_filter_size: [32]
   kernel: [3]
-  drop_out_rate: [0.25]
-  input_size: [512, 512]    #[1536, 1536] #h, w
+  drop_out_rate: [0.2 ]
+  input_size: [512, 512]    #[1536, 1536] #h, w 
   channel: 1
   num_class: 1
-  model_type: 'fourier1_2' #multi_task, attention, fourier1, fourier1_2, single
-  dropout: False
+  model_type: 'single' #multi_task, attention, fourier1, fourier1_2, single
+  dropout: True
   anydepth: True
 train_config:
-  loss: BCE
+  loss: ActiveContourLoss
   accuracy: dice_score
   optimizer: Radam
-  lr_rate: [0.0001]
-  weight_decay: [0]
-  batch_size: [4]
-  epochs: 30
+  lr_rate: [0.0005]
+  weight_decay: [0.0001]
+  batch_size: [8]
+  epochs: 150
+  early_stop: 20
   num_workers: 20
+  seed: 123
   use_cuda: True
 dataset_config:
-  train_path: '/home/caki/desktop/projects/liver/liver_dataset_processed_fourier/train/'
-  val_path: '/home/caki/desktop/projects/liver/liver_dataset_processed_fourier/val/'
+  train_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/train'
+  val_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/val'
   test_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/test'
   aug_rate: [0]
-  save_dir: exp2
+  save_dir: active_counter_exp1
   class_names: ['background','liver']
 resume:
   flag: False
-  path: exp7_fourier1/models/last_epoch.pt
-  epoch: 106
+  path: hd_exp1_123_bs/models/last_epoch.pt
+  epoch: 75
 

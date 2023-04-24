@@ -2,8 +2,8 @@ import torch
 from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg_Fourier1, Data_Reg_Fourier1_2
 from loss import calc_loss, MultitaskUncertaintyLoss
 from torchvision.utils import make_grid, save_image
-
-from Model import UNet, UNet_multitask, UNet_attention, UNet_fourier1, UNet_fourier1_2
+import random
+from Model import UNet, UNet_multitask, UNet_attention, UNet_fourier1, UNet_fourier1_2, UNet_BS
 from collections import defaultdict
 from torch import optim
 import torch.nn as nn
@@ -18,6 +18,13 @@ import yaml
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from Trainer import Trainer
+seed = 123
+
+
+def weights_init(m):
+    torch.manual_seed(seed)
+    if isinstance(m, nn.Conv2d):
+        torch.nn.init.kaiming_uniform_(m.weight)
 
 
 def parse_args():
@@ -27,23 +34,14 @@ def parse_args():
     return args
 
 
-def print_metrics(metrics, epoch_samples, phase):
-    outputs = []
-    for k in metrics.keys():
-        outputs.append("{}: {:4f}".format(k, metrics[k] / epoch_samples))
-    return ("{}: {}".format(phase, ", ".join(outputs)))
-
-
-def plot_loss_functions(output_save_dir, train_loss, val_loss, name):
-    plt.figure(figsize=(8, 4))
-    plt.xlabel('epoch')
-    plt.ylabel('loss')
-    plt.plot(np.arange(len(train_loss)), train_loss, label='train loss')
-    plt.plot(np.arange(len(val_loss)), val_loss, label='val loss')
-    plt.grid(True)
-    plt.legend()
-    plt.savefig(os.path.join(output_save_dir, '{}.png'.format(name)))
-    plt.cla()
+def seed_everything(seed):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def check_input(dataloaders, titles=["Input", 'Target']):
@@ -153,16 +151,24 @@ def main(cfg):
     val_path = cfg['dataset_config']['val_path']
     aug_rate = cfg['dataset_config']['aug_rate']
     output_save_dir = cfg['dataset_config']['save_dir']
-    anydepth = cfg['model_config']['anydepth']
+    if not os.path.exists(output_save_dir):
+        os.mkdir(output_save_dir)
+    with open(os.path.join(output_save_dir, 'config.json'), 'w') as outfile:
+        yaml.dump(cfg, outfile, default_flow_style=False)
 
+    anydepth = cfg['model_config']['anydepth']
+    seed_everything(seed)
     if model_type == 'single':
         train_dataset = Data_Binary(
             train_path, ch, anydepth, input_size=input_size)
         val_dataset = Data_Binary(
             val_path, ch, anydepth, input_size=input_size)
 
-        model = UNet(ch, num_class, initial_filter_size,
-                     use_cuda, dropout, dropout_p)
+        # model = UNet(ch, num_class, initial_filter_size,
+        #              use_cuda, dropout, dropout_p)
+        model = UNet_BS([1, 32, 64, 128, 256, 512],
+                        "parameters", "dropout")
+        model.apply(weights_init)
 
     elif model_type == 'multi_task':
         train_dataset = Data_Reg_Binary(
@@ -221,7 +227,7 @@ def main(cfg):
         'train': train_loader,
         'val': val_loader
     }
-    check_input(dataloaders)
+    # check_input(dataloaders)
     # optimizers
     optimizer = optim.Adam(
         model.parameters(), lr=lr_rate, weight_decay=weight_decay)
@@ -232,7 +238,7 @@ def main(cfg):
         lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.5, patience=30, min_lr=1e-5)
     trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
-                      patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=lr_scheduler, start_epoch=start_epoch)
+                      patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=False, start_epoch=start_epoch)
     best_model = trainer.train()
 
 

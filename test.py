@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 import re
 import torch
-from Model import UNet, UNet_multitask, UNet_attention, UNet_fourier1, UNet_fourier1_2
+from Model import UNet, UNet_multitask, UNet_attention, UNet_fourier1, UNet_fourier1_2, UNet_BS
 from torchvision import transforms
 import cv2
 from tqdm import tqdm
@@ -12,8 +12,9 @@ import matplotlib.pyplot as plt
 import argparse
 import yaml
 from skimage import metrics
+# scipy
 # from sklearn.metrics import auc
-
+from scipy.spatial.distance import directed_hausdorff
 image_ext = ['.png', '.jpg']
 
 
@@ -216,6 +217,7 @@ def pre_process(img):
     img = (img - img.mean()) / img.std()
     # HW to CHW (for gray scale)
     img = np.expand_dims(img, 0)
+    # add batch
     img = np.expand_dims(img, 0)
 
     # HWC to CHW, BGR to RGB (for three channel)
@@ -394,9 +396,12 @@ def main(cfg, model_path):
     model_type = cfg['model_config']['model_type']
     dropout = cfg['model_config']['dropout']
     dropout_p = float(cfg['model_config']['drop_out_rate'][0])
+
     if model_type == 'single':
-        model = UNet(ch, num_class, initial_filter_size,
-                     use_cuda, dropout, dropout_p)
+        # model = UNet(ch, num_class, initial_filter_size,
+        #              use_cuda, dropout, dropout_p)
+        model = UNet_BS([1, 32, 64, 128, 256, 512], "parameters", "dropout")
+
         model.load_state_dict(torch.load(model_path))
         model.eval()
         if use_cuda:
