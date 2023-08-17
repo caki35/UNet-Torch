@@ -18,13 +18,8 @@ import yaml
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from Trainer import Trainer
+from test import test_single, test_multitask, get_image_list
 seed = 123
-
-
-def weights_init(m):
-    torch.manual_seed(seed)
-    if isinstance(m, nn.Conv2d):
-        torch.nn.init.kaiming_uniform_(m.weight)
 
 
 def parse_args():
@@ -164,13 +159,13 @@ def main(cfg):
         val_dataset = Data_Binary(
             val_path, ch, anydepth, input_size=input_size)
 
-        # model = UNet(ch, num_class, initial_filter_size,
-        #              use_cuda, dropout, dropout_p)
-        model = UNet_BS([1, 32, 64, 128, 256, 512],
-                        "parameters", "dropout")
-        model.apply(weights_init)
+        model = UNet(ch, num_class, initial_filter_size,
+                     use_cuda, dropout, dropout_p)
+        # model = UNet_BS([1, 32, 64, 128, 256, 512],
+        #                 "parameters", "dropout")
+        # model.apply(weights_init)
 
-    elif model_type == 'multi_task':
+    elif model_type == 'multi_task' or model_type == "multi_task_uc":
         train_dataset = Data_Reg_Binary(
             train_path, ch, anydepth, input_size=input_size)
         val_dataset = Data_Reg_Binary(
@@ -184,12 +179,13 @@ def main(cfg):
             val_path, ch, anydepth, input_size=input_size)
         model = UNet_attention(ch, num_class, initial_filter_size, use_cuda)
 
-    elif model_type == 'fourier1':
+    elif model_type == 'fourier1' or model_type == 'fourier1MT':
         train_dataset = Data_Reg_Fourier1(
             train_path, ch, anydepth, input_size=input_size)
         val_dataset = Data_Reg_Fourier1(
             val_path, ch, anydepth, input_size=input_size)
         model = UNet_fourier1(ch, num_class, initial_filter_size, use_cuda)
+
     elif model_type == 'fourier1_2':
         train_dataset = Data_Reg_Fourier1_2(
             train_path, ch, anydepth, input_size=input_size)
@@ -227,6 +223,7 @@ def main(cfg):
         'train': train_loader,
         'val': val_loader
     }
+
     # check_input(dataloaders)
     # optimizers
     optimizer = optim.Adam(
@@ -240,6 +237,14 @@ def main(cfg):
     trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
                       patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=False, start_epoch=start_epoch)
     best_model = trainer.train()
+
+    image_list = get_image_list(cfg['dataset_config']['test_path'])
+    if model_type == 'single':
+        test_single(trainer.model, device, input_size, anydepth,
+                    image_list, output_save_dir)
+    else:
+        test_multitask(trainer.model, device, input_size,
+                       anydepth, image_list, output_save_dir)
 
 
 if __name__ == "__main__":

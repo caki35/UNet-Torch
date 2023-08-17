@@ -2,34 +2,34 @@ model_config:
   model: UNet1 #the directory to which the results are saved
   initial_filter_size: [32]
   kernel: [3]
-  drop_out_rate: [0.2 ]
+  drop_out_rate: [0.2]
   input_size: [512, 512]    #[1536, 1536] #h, w 
   channel: 1
   num_class: 1
-  model_type: 'single' #multi_task, attention, fourier1, fourier1_2, single
-  dropout: True
+  model_type: 'fourier1' #multi_task, attention, fourier1, fourier1_2, single, FFTNet, fourier1MT
+  dropout: False
   anydepth: True
 train_config:
-  loss: ActiveContourLoss
+  loss: BCE
   accuracy: dice_score
   optimizer: Radam
   lr_rate: [0.0005]
   weight_decay: [0.0001]
   batch_size: [8]
-  epochs: 150
+  epochs: 200
   early_stop: 20
   num_workers: 20
-  seed: 123
+  seed: 17
   use_cuda: True
 dataset_config:
   train_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/train'
   val_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/val'
   test_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/test'
   aug_rate: [0]
-  save_dir: active_counter_exp1
+  save_dir: results/FTMTout_32_exp7_35/
   class_names: ['background','liver']
 resume:
   flag: False
-  path: hd_exp1_123_bs/models/last_epoch.pt
-  epoch: 75
+  path: MT2/models/epoch50.pt
+  epoch: 50
 

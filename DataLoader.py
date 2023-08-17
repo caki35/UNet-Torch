@@ -21,7 +21,7 @@ class Data_Reg_Binary(Dataset):
         self.height = input_size[0]
         self.width = input_size[1]
 
-    def transform_mask(self, img, mask):
+    def transform_mask(self, img, mask, gt_dist):
 
         # # Random horizontal flipping
         # if random.random() > 0.5 and self.augmentation:
@@ -81,10 +81,14 @@ class Data_Reg_Binary(Dataset):
         # gt_mask_bin = TF.to_tensor(gt_mask_bin)
 
         # for 0 - 1 -2
-        mask = np.expand_dims(mask, 0)  # comment for multiclass
+        # mask = np.expand_dims(mask, 0)  # comment for multiclass
         mask = torch.as_tensor(np.array(mask), dtype=torch.int64)
 
-        return img, mask
+        # gt_dist = (gt_dist - gt_dist.mean()) / gt_dist.std()
+        # gt_dist = np.expand_dims(gt_dist, 0)
+        gt_dist = torch.as_tensor(gt_dist, dtype=torch.float32)
+
+        return img, mask, gt_dist
 
     def __getitem__(self, index):
         # read image
@@ -107,24 +111,24 @@ class Data_Reg_Binary(Dataset):
         # read target label mask
         gt_mask_path = imgPath[:imgPath.rfind('.')] + '_label.png'
         gt_mask_bin = cv2.imread(gt_mask_path, 0)
-        if r != 1:  # if sizes are not equal
-            interp = cv2.INTER_LINEAR if r > 1 else cv2.INTER_AREA
-            gt_mask_bin = cv2.resize(gt_mask_bin, (self.width, self.height),
-                                     interpolation=interp)
-
-        # Preprocess
-        img, gt_mask_bin = self.transform_mask(img, gt_mask_bin)
+        gt_mask_bin = cv2.resize(gt_mask_bin, (self.width, self.height),
+                                 interpolation=cv2.INTER_NEAREST)
 
         # read distance map
-        gtPath_dist = imgPath[:imgPath.rfind('.')] + '_dist_label.png'
-        gt_dist = cv2.imread(gtPath_dist, 0)
+        gtPath_dist = imgPath[:imgPath.rfind('.')] + '_FDmap.npy'
+        gt_dist = np.load(gtPath_dist)
         if r != 1:  # if sizes are not equal
             interp = cv2.INTER_LINEAR if r > 1 else cv2.INTER_AREA
             gt_dist = cv2.resize(gt_dist, (self.width, self.height),
                                  interpolation=interp)
-
+        # print(np.unique(gt_mask_bin))
+        # print(np.unique(gt_dist))
         # preprocess
-        gt_dist = TF.to_tensor(gt_dist)
+        img, gt_mask_bin, gt_dist = self.transform_mask(
+            img, gt_mask_bin, gt_dist)
+        # print(torch.unique(gt_dist))
+
+        # print(torch.unique(gt_mask_bin))
 
         return img, gt_mask_bin, gt_dist
 
@@ -220,7 +224,7 @@ class Data_Binary(Dataset):
         # gt_mask_bin = TF.to_tensor(gt_mask_bin)
 
         # for 0 - 1 -2
-        mask = np.expand_dims(mask, 0)  # comment multiclass
+        # mask = np.expand_dims(mask, 0)  # comment multiclass
         mask = torch.as_tensor(np.array(mask), dtype=torch.int64)
 
         return img, mask

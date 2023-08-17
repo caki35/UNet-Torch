@@ -12,13 +12,14 @@ class DoubleConv(nn.Module):
         if not mid_channels:
             mid_channels = out_channels
         self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels,
+            nn.Conv2d(in_channels, out_channels,
                       kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
+            # nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
             nn.Conv2d(mid_channels, out_channels,
                       kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            # nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
 
@@ -174,48 +175,48 @@ class UNet_multitask(nn.Module):
 
         # Encoder
         self.inc = DoubleConv(n_channels, self.initial_feature_map)
-        self.inc.apply(self.weights_init)
+        # self.inc.apply(self.weights_init)
         self.down1 = Down(self.initial_feature_map, self.initial_feature_map*2)
-        self.down1.apply(self.weights_init)
+        # self.down1.apply(self.weights_init)
         self.down2 = Down(self.initial_feature_map*2,
                           self.initial_feature_map*4)
-        self.down2.apply(self.weights_init)
+        # self.down2.apply(self.weights_init)
         self.down3 = Down(self.initial_feature_map*4,
                           self.initial_feature_map*8)
-        self.down3.apply(self.weights_init)
+        # self.down3.apply(self.weights_init)
         self.down4 = Down(self.initial_feature_map*8,
                           self.initial_feature_map*16)
-        self.down4.apply(self.weights_init)
+        # self.down4.apply(self.weights_init)
 
         # Decoder Binary
         self.up1_bin = Up(self.initial_feature_map*16,
                           self.initial_feature_map*8)
-        self.up1_bin.apply(self.weights_init)
+        # self.up1_bin.apply(self.weights_init)
         self.up2_bin = Up(self.initial_feature_map*8,
                           self.initial_feature_map*4)
-        self.up2_bin.apply(self.weights_init)
+        # self.up2_bin.apply(self.weights_init)
         self.up3_bin = Up(self.initial_feature_map*4,
                           self.initial_feature_map*2)
-        self.up3_bin.apply(self.weights_init)
+        # self.up3_bin.apply(self.weights_init)
         self.up4_bin = Up(self.initial_feature_map*2, self.initial_feature_map)
-        self.up4_bin.apply(self.weights_init)
+        # self.up4_bin.apply(self.weights_init)
         self.outc_bin = OutConv(self.initial_feature_map, n_classes)
-        self.outc_bin.apply(self.weights_init)
+        # self.outc_bin.apply(self.weights_init)
 
         # Decoder Regression
         self.up1_reg = Up(self.initial_feature_map*16,
                           self.initial_feature_map*8)
-        self.up1_reg.apply(self.weights_init)
+        # self.up1_reg.apply(self.weights_init)
         self.up2_reg = Up(self.initial_feature_map*8,
                           self.initial_feature_map*4)
-        self.up2_reg.apply(self.weights_init)
+        # self.up2_reg.apply(self.weights_init)
         self.up3_reg = Up(self.initial_feature_map*4,
                           self.initial_feature_map*2)
-        self.up3_reg.apply(self.weights_init)
+        # self.up3_reg.apply(self.weights_init)
         self.up4_reg = Up(self.initial_feature_map*2, self.initial_feature_map)
-        self.up4_reg.apply(self.weights_init)
+        # self.up4_reg.apply(self.weights_init)
         self.outc_reg = OutConv(self.initial_feature_map, n_classes)
-        self.outc_reg.apply(self.weights_init)
+        # self.outc_reg.apply(self.weights_init)
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -234,7 +235,7 @@ class UNet_multitask(nn.Module):
         x_reg = self.up2_reg(x_reg, x3)
         x_reg = self.up3_reg(x_reg, x2)
         x_reg = self.up4_reg(x_reg, x1)
-        logits_reg = self.outc_reg(x_bin)
+        logits_reg = self.outc_reg(x_reg)
 
         return logits_bin, logits_reg
 
@@ -248,11 +249,17 @@ class UNet_multitask(nn.Module):
         self.down2 = torch.utils.checkpoint(self.down2)
         self.down3 = torch.utils.checkpoint(self.down3)
         self.down4 = torch.utils.checkpoint(self.down4)
-        self.up1 = torch.utils.checkpoint(self.up1)
-        self.up2 = torch.utils.checkpoint(self.up2)
-        self.up3 = torch.utils.checkpoint(self.up3)
-        self.up4 = torch.utils.checkpoint(self.up4)
-        self.outc = torch.utils.checkpoint(self.outc)
+        self.up1_bin = torch.utils.checkpoint(self.up1_bin)
+        self.up2_bin = torch.utils.checkpoint(self.up2_bin)
+        self.up3_bin = torch.utils.checkpoint(self.up3_bin)
+        self.up4_bin = torch.utils.checkpoint(self.up4_bin)
+        self.outc_bin = torch.utils.checkpoint(self.outc_bin)
+
+        self.up1_reg = torch.utils.checkpoint(self.up1_reg)
+        self.up2_reg = torch.utils.checkpoint(self.up2_reg)
+        self.up3_reg = torch.utils.checkpoint(self.up3_reg)
+        self.up4_reg = torch.utils.checkpoint(self.up4_reg)
+        self.outc_reg = torch.utils.checkpoint(self.outc_reg)
 
 
 class Attention_block(nn.Module):
@@ -580,6 +587,101 @@ class UNet_fourier1(nn.Module):
         if isinstance(m, nn.Conv2d):
             nn.init.kaiming_normal_(m.weight)
 
+    # def use_checkpointing(self):
+    #     self.inc = torch.utils.checkpoint(self.inc)
+    #     self.down1 = torch.utils.checkpoint(self.down1)
+    #     self.down2 = torch.utils.checkpoint(self.down2)
+    #     self.down3 = torch.utils.checkpoint(self.down3)
+    #     self.down4 = torch.utils.checkpoint(self.down4)
+    #     self.up1 = torch.utils.checkpoint(self.up1)
+    #     self.up2 = torch.utils.checkpoint(self.up2)
+    #     self.up3 = torch.utils.checkpoint(self.up3)
+    #     self.up4 = torch.utils.checkpoint(self.up4)
+    #     self.outc = torch.utils.checkpoint(self.outc)
+
+
+class UNet_fourier1_mt(nn.Module):
+    def __init__(self, n_channels, n_classes, initial_feature_map=64, usa_cuda=True):
+        super(UNet_fourier1_mt, self).__init__()
+        self.usa_cuda = usa_cuda
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.initial_feature_map = initial_feature_map
+        self.num_tasks = 2
+        self.log_vars = nn.Parameter(torch.zeros((self.num_tasks)))
+
+        # Encoder
+        self.inc = DoubleConv(n_channels, self.initial_feature_map)
+        self.inc.apply(self.weights_init)
+        self.down1 = Down(self.initial_feature_map, self.initial_feature_map*2)
+        self.down1.apply(self.weights_init)
+        self.down2 = Down(self.initial_feature_map*2,
+                          self.initial_feature_map*4)
+        self.down2.apply(self.weights_init)
+        self.down3 = Down(self.initial_feature_map*4,
+                          self.initial_feature_map*8)
+        self.down3.apply(self.weights_init)
+        self.down4 = Down(self.initial_feature_map*8,
+                          self.initial_feature_map*16)
+        self.down4.apply(self.weights_init)
+
+        # Decoder Binary
+        self.up1_bin = Up(self.initial_feature_map*16,
+                          self.initial_feature_map*8)
+        self.up1_bin.apply(self.weights_init)
+        self.up2_bin = Up(self.initial_feature_map*8,
+                          self.initial_feature_map*4)
+        self.up2_bin.apply(self.weights_init)
+        self.up3_bin = Up(self.initial_feature_map*4,
+                          self.initial_feature_map*2)
+        self.up3_bin.apply(self.weights_init)
+        self.up4_bin = Up(self.initial_feature_map*2, self.initial_feature_map)
+        self.up4_bin.apply(self.weights_init)
+        self.outc_bin = OutConv(self.initial_feature_map, n_classes)
+        self.outc_bin.apply(self.weights_init)
+
+        # Decoder Fourier Outer 1
+        self.up1_fouter1 = Up(self.initial_feature_map*16,
+                              self.initial_feature_map*8)
+        self.up1_fouter1.apply(self.weights_init)
+        self.up2_fouter1 = Up(self.initial_feature_map*8,
+                              self.initial_feature_map*4)
+        self.up2_fouter1.apply(self.weights_init)
+        self.up3_fouter1 = Up(self.initial_feature_map*4,
+                              self.initial_feature_map*2)
+        self.up3_fouter1.apply(self.weights_init)
+        self.up4_fouter1 = Up(self.initial_feature_map *
+                              2, self.initial_feature_map)
+        self.up4_fouter1.apply(self.weights_init)
+        self.outc_fouter1 = OutConv(self.initial_feature_map, n_classes)
+        self.outc_fouter1.apply(self.weights_init)
+
+    def forward(self, x):
+        x1 = self.inc(x)     # 64
+        x2 = self.down1(x1)  # 128
+        x3 = self.down2(x2)  # 256
+        x4 = self.down3(x3)  # 512
+        x5 = self.down4(x4)  # 1024
+
+        # 1024(x5) --> ConvT --> 512 concat with x4(512) --> 1024 --> DoubleConv --> 512
+        x_bin = self.up1_bin(x5, x4)
+        x_bin = self.up2_bin(x_bin, x3)
+        x_bin = self.up3_bin(x_bin, x2)
+        x_bin = self.up4_bin(x_bin, x1)
+        logits_bin = self.outc_bin(x_bin)
+
+        x_fouter1 = self.up1_fouter1(x5, x4)
+        x_fouter1 = self.up2_fouter1(x_fouter1, x3)
+        x_fouter1 = self.up3_fouter1(x_fouter1, x2)
+        x_fouter1 = self.up4_fouter1(x_fouter1, x1)
+        logits_fouter1 = self.outc_fouter1(x_fouter1)
+
+        return logits_bin, logits_fouter1
+
+    def weights_init(self, m):
+        if isinstance(m, nn.Conv2d):
+            nn.init.kaiming_normal_(m.weight)
+
     def use_checkpointing(self):
         self.inc = torch.utils.checkpoint(self.inc)
         self.down1 = torch.utils.checkpoint(self.down1)
@@ -591,6 +693,25 @@ class UNet_fourier1(nn.Module):
         self.up3 = torch.utils.checkpoint(self.up3)
         self.up4 = torch.utils.checkpoint(self.up4)
         self.outc = torch.utils.checkpoint(self.outc)
+
+    def calc_loss(self, losses, is_regression, reduction):
+        dtype = losses.dtype
+        device = losses.device
+        stds = (torch.exp(self.log_vars)**(1/2)).to(dtype)
+        is_regression = is_regression.to(device).to(dtype)
+        coeffs = 1 / ((is_regression+1)*(stds**2))
+        multi_task_losses = coeffs*losses + torch.log(stds)
+        print(torch.log(stds))
+        print(torch.clamp(torch.log(stds), min=0))
+        print(coeffs)
+        print(coeffs*losses)
+
+        if reduction == 'sum':
+            multi_task_losses = multi_task_losses.sum()
+        if reduction == 'mean':
+            multi_task_losses = multi_task_losses.mean()
+
+        return multi_task_losses
 
 
 ############### UNet Selahattin and Bahadir #######################

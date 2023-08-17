@@ -1,4 +1,4 @@
-from Model import UNet_BS
+from Model import UNet_BS, UNet_multitask
 import torch
 import os
 from scipy.spatial.distance import directed_hausdorff
@@ -14,7 +14,7 @@ image_ext = ['.png', '.jpg']
 device = "cuda:0"
 
 test_path = '/home/caki/desktop/projects/liver/liver_dataset_processed/test'
-model_path = 'active_counter_exp1_45/models/epoch26.pt'
+model_path = 'results/hd_exp1_bs_45/models/epoch91.pt'
 
 
 def natural_sort(l):
@@ -105,15 +105,16 @@ def main():
     image_list = get_image_list(test_path)
 
     model = UNet_BS([1, 32, 64, 128, 256, 512], "parameters", "dropout")
-
+    # model = UNet_multitask(1, 1, 32, True)
     model.load_state_dict(torch.load(model_path))
     model.eval()
     model.to(device=device)
     performace_results = {
-        "Precision": [], "Recall": [], "F Score": [], "Hausdorff": [], "IoU": [], 'DiceScore': []}
+        "Sample": [], "Precision": [], "Recall": [], "F Score": [], "Hausdorff": [], "IoU": [], 'DiceScore': []}
     for img_path in tqdm(image_list):
         image_name = img_path.split('/')[-1]
         image_name = image_name[:image_name.rfind('.')]
+        performace_results["Sample"].append(image_name)
 
         img_org = cv2.imread(img_path, cv2.IMREAD_ANYDEPTH)
         img = pre_process(img_org)

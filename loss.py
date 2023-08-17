@@ -52,101 +52,6 @@ class ActiveContourLoss(nn.Module):
         return lenth + lambdaP * (mu * region_in + region_out)
 
 
-class HausdorffERLoss(nn.Module):
-    """Binary Hausdorff loss based on morphological erosion"""
-
-    def __init__(self, alpha=2.0, erosions=10, **kwargs):
-        super(HausdorffERLoss, self).__init__()
-        self.alpha = alpha
-        self.erosions = erosions
-        self.prepare_kernels()
-
-    def prepare_kernels(self):
-        cross = np.array([cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))])
-        bound = np.array([[[0, 0, 0], [0, 1, 0], [0, 0, 0]]])
-
-        self.kernel2D = cross * 0.2
-        self.kernel3D = np.array([bound, cross, bound]) * (1 / 7)
-
-    @torch.no_grad()
-    def perform_erosion(
-        self, pred: np.ndarray, target: np.ndarray, debug
-    ) -> np.ndarray:
-        bound = (pred - target) ** 2
-
-        if bound.ndim == 5:
-            kernel = self.kernel3D
-        elif bound.ndim == 4:
-            kernel = self.kernel2D
-        else:
-            raise ValueError(f"Dimension {bound.ndim} is nor supported.")
-
-        eroted = np.zeros_like(bound)
-        erosions = []
-
-        for batch in range(len(bound)):
-
-            # debug
-            erosions.append(np.copy(bound[batch][0]))
-
-            for k in range(self.erosions):
-
-                # compute convolution with kernel
-                dilation = convolve(
-                    bound[batch], kernel, mode="constant", cval=0.0)
-
-                # apply soft thresholding at 0.5 and normalize
-                erosion = dilation - 0.5
-                erosion[erosion < 0] = 0
-
-                if erosion.ptp() != 0:
-                    erosion = (erosion - erosion.min()) / erosion.ptp()
-
-                # save erosion and add to loss
-                bound[batch] = erosion
-                eroted[batch] += erosion * (k + 1) ** self.alpha
-
-                if debug:
-                    erosions.append(np.copy(erosion[0]))
-
-        # image visualization in debug mode
-        if debug:
-            return eroted, erosions
-        else:
-            return eroted
-
-    def forward(
-        self, pred: torch.Tensor, target: torch.Tensor, debug=False
-    ) -> torch.Tensor:
-        """
-        Uses one binary channel: 1 - fg, 0 - bg
-        pred: (b, 1, x, y, z) or (b, 1, x, y)
-        target: (b, 1, x, y, z) or (b, 1, x, y)
-        """
-        assert pred.dim() == 4 or pred.dim() == 5, "Only 2D and 3D supported"
-        assert (
-            pred.dim() == target.dim()
-        ), "Prediction and target need to be of same dimension"
-
-        pred = torch.sigmoid(pred)
-
-        if debug:
-            eroted, erosions = self.perform_erosion(
-                pred.cpu().numpy(), target.cpu().numpy(), debug
-            )
-            return eroted.mean(), erosions
-
-        else:
-            eroted = torch.from_numpy(
-                self.perform_erosion(pred.cpu().numpy(),
-                                     target.cpu().numpy(), debug)
-            ).float()
-
-            loss = eroted.mean()
-
-            return loss
-
-
 class HausdorffDTLoss(nn.Module):
     """Binary Hausdorff loss based on distance transform"""
 
@@ -264,24 +169,70 @@ class MultitaskUncertaintyLoss(nn.Module):
     #     total_loss = 0
     #     loss_cls, loss_reg = loss_values
     #     log_var_task1, log_var_task2 = log_var_tasks
-    #     total_loss += (loss_cls.cpu() / (2*torch.exp(2 * log_var_task1))) + log_var_task1
-    #     total_loss += (loss_reg.cpu() / torch.exp(2 * log_var_task2)) + log_var_task2
+    #     total_loss += (loss_cls.cpu() /
+    #                    (2*torch.exp(log_var_task1))) + log_var_task1
+    #     total_loss += (loss_reg.cpu() / torch.exp(2 *
+    #                    log_var_task2)) + log_var_task2
+
+    #     return torch.mean(total_loss)
+
+    def forward(self, loss_values, log_var_tasks, regg_flag):
+        total_loss = 0
+        for i in range(0, len(loss_values)):
+            dtype = loss_values[i].dtype
+            device = loss_values[i].device
+            stds = (
+                torch.exp(log_var_tasks[i])**(1/2)).to(device).to(dtype)
+            if regg_flag[i]:
+                coeff = 1 / (2*(stds**2))
+            else:
+                coeff = 1 / (stds**2)
+            total_loss += coeff*loss_values[i] + torch.log(stds)
+        return total_loss
+
+    # # with sigma
+    # def forward(self, loss_values, sigmas_sqr):
+    #     total_loss = 0
+    #     for i in range(0, len(loss_values)):
+    #         total_loss += (loss_values[i].cpu() /
+    #                        (2*sigmas_sqr[i])) + torch.log(sigmas_sqr[i])
     #     return total_loss
 
     # def forward(self, loss_values, log_var_tasks):
     #     total_loss = 0
-    #     loss_cls, loss_reg = loss_values
-    #     log_var_task1, log_var_task2 = log_var_tasks
-    #     total_loss += loss_cls.cpu() * torch.exp(-log_var_task1) + log_var_task1
-    #     total_loss += loss_reg.cpu() * torch.exp(-log_var_task2) + log_var_task2
-    #     return total_loss/2
+    #     for i in range(0, len(loss_values)):
+    #         total_loss += loss_values[i].cpu() * \
+    #             torch.exp(-log_var_tasks[i]) + log_var_tasks[i]
+    #     return total_loss/4
 
-    def forward(self, loss_values, log_var_tasks):
-        total_loss = 0
-        for i in range(0, len(loss_values)):
-            total_loss += loss_values[i].cpu() * \
-                torch.exp(-log_var_tasks[i]) + log_var_tasks[i]
-        return total_loss/len(loss_values)
+
+class MultiTaskLoss(torch.nn.Module):
+    '''https://arxiv.org/abs/1705.07115'''
+
+    def __init__(self, is_regression, reduction='none'):
+        super(MultiTaskLoss, self).__init__()
+        self.is_regression = is_regression
+        self.n_tasks = len(is_regression)
+        self.log_vars = torch.nn.Parameter(torch.zeros(self.n_tasks))
+        self.reduction = reduction
+
+    def forward(self, losses):
+        dtype = losses.dtype
+        device = losses.device
+        stds = (torch.exp(self.log_vars)**(1/2)).to(device).to(dtype)
+        self.is_regression = self.is_regression.to(device).to(dtype)
+        coeffs = 1 / ((self.is_regression+1)*(stds**2))
+        multi_task_losses = coeffs*losses + torch.log(stds)
+        # print(torch.log(stds))
+        # print(coeffs)
+        # print(coeffs*losses)
+
+        if self.reduction == 'sum':
+            multi_task_losses = multi_task_losses.sum()
+        if self.reduction == 'mean':
+            multi_task_losses = multi_task_losses.mean()
+
+        return multi_task_losses
 
 
 def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
@@ -312,8 +263,6 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         loss = DiceLoss(multiclass=True).dice_score_mc(pred, target)
     if loss_type == 'HausdorffDTLoss':
         loss = HausdorffDTLoss()(pred, target, debug=False)
-    if loss_type == 'HausdorffERLoss':
-        loss = HausdorffERLoss()(pred, target, debug=False)
     if loss_type == "ActiveContourLoss":
         loss = ActiveContourLoss()(pred, target)
     return loss

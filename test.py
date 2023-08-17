@@ -11,10 +11,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import argparse
 import yaml
-from skimage import metrics
-# scipy
-# from sklearn.metrics import auc
 from scipy.spatial.distance import directed_hausdorff
+import pandas as pd
 image_ext = ['.png', '.jpg']
 
 
@@ -55,6 +53,7 @@ class Results:
         self.tn = 0
         self.fn = 0
         self.precision = []
+        self.images = []
         self.recall = []
         self.accuracy = []
         self.f1 = []
@@ -69,6 +68,7 @@ class Results:
         """
         smoothening_factor = 1e-6
         if self.tolerance != 0:
+            print('zzz')
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE, (self.tolerance, self.tolerance))
             y_gt_tolerated = cv2.dilate(y_gt, kernel, iterations=1)
@@ -88,10 +88,17 @@ class Results:
         self.tn += tn_pp
         self.fn += fn_pp
 
-        self.precision.append(tp_pp / (tp_pp + fp_pp + smoothening_factor))
-        self.recall.append(tp_pp / (tp_pp + fn_pp))
+        current_img_precision = tp_pp / (tp_pp + fp_pp + smoothening_factor)
+        current_img_recall = tp_pp / (tp_pp + fn_pp + smoothening_factor)
+        # current_img_f1 = 2 * tp_pp / (2 * tp_pp + fp_pp + fn_pp)
+
+        current_img_f1 = 2*(current_img_precision*current_img_recall) / \
+            (current_img_precision+current_img_recall + smoothening_factor)
+
+        self.precision.append(current_img_precision)
+        self.recall.append(current_img_recall)
         self.accuracy.append((tp_pp + tn_pp) / (tp_pp + tn_pp + fp_pp + fn_pp))
-        self.f1.append(2 * tp_pp / (2 * tp_pp + fp_pp + fn_pp))
+        self.f1.append(current_img_f1)
 
         intersection = np.sum((y_pred == 1) * (y_gt_tolerated == 1))
         y_true_area = np.sum((y_gt_tolerated == 1))
@@ -103,11 +110,11 @@ class Results:
                           (combined_area + smoothening_factor))
         self.dice_list.append(dice_score)
         self.iou_list.append(iou_score)
+
         if not np.all(y_pred == 0) or np.all(y_pred == 1):
-            self.hausdorff_distance.append(
-                metrics.hausdorff_distance(y_pred, y_gt_tolerated))
-        else:
-            print(metrics.hausdorff_distance(y_pred, y_gt_tolerated))
+            hausdorff = max(directed_hausdorff(y_gt_tolerated, y_pred)[
+                0], directed_hausdorff(y_pred, y_gt_tolerated)[0])
+            self.hausdorff_distance.append(hausdorff)
 
     def mean_square_error(self, y_gt, y_pred):
         number_of_pixel = y_gt.shape[0] * y_gt.shape[1]
@@ -120,13 +127,13 @@ class Results:
         # Pixel-wise analysis:
         f.write('Pixel-wise analysis:\n')
 
-        precision = round(self.tp / (self.tp + self.fp), 3)
-        recall = round(self.tp / (self.tp + self.fn), 3)
-        f1_score = round(2 * precision * recall / (precision + recall), 3)
+        precision = round(100*(self.tp / (self.tp + self.fp)), 2)
+        recall = round(100*(self.tp / (self.tp + self.fn)), 2)
+        f1_score = round(2 * precision * recall / (precision + recall), 2)
         acc = round((self.tp + self.tn) /
                     (self.tp + self.tn + self.fp + self.fn), 3)
         dice_score = round(
-            (2*self.tp)/(self.fp+self.fn+(2*self.tp)), 3)
+            100*((2*self.tp)/(self.fp+self.fn+(2*self.tp))), 2)
 
         f.write('precision: {}\n'.format(precision))
         f.write('recall: {}\n'.format(recall))
@@ -139,12 +146,12 @@ class Results:
         f.write('\n')
         f.write('Image-wise analysis:\n')
 
-        precision = round(sum(self.precision)/len(self.precision), 3)
-        recall = round(sum(self.recall)/len(self.recall), 3)
-        f1_score = round(sum(self.f1)/len(self.f1), 3)
-        acc = round(sum(self.accuracy)/len(self.accuracy), 3)
-        dice_score = round(sum(self.dice_list)/len(self.dice_list), 3)
-        iou_based_image = round(sum(self.iou_list)/len(self.iou_list), 3)
+        precision = round((sum(self.precision)/len(self.precision))*100, 2)
+        recall = round((sum(self.recall)/len(self.recall))*100, 2)
+        f1_score = round((sum(self.f1)/len(self.f1))*100, 2)
+        acc = round((sum(self.accuracy)/len(self.accuracy))*100, 2)
+        dice_score = round((sum(self.dice_list)/len(self.dice_list))*100, 2)
+        iou_based_image = round((sum(self.iou_list)/len(self.iou_list))*100, 2)
 
         f.write('precision: {}\n'.format(precision))
         f.write('recall: {}\n'.format(recall))
@@ -184,8 +191,8 @@ class Results:
             f.write("FDR:"+str(fdr_score)+'\n')
         if hausdorff_distance:
             hausdorff_distance_avg = round(
-                sum(self.hausdorff_distance)/len(self.hausdorff_distance), 3)
-            hausdorff_distance_max = round(max(self.hausdorff_distance), 3)
+                sum(self.hausdorff_distance)/len(self.hausdorff_distance), 2)
+            hausdorff_distance_max = round(max(self.hausdorff_distance)*100, 2)
             f.write("Hausdorff Distance Avg:"+str(hausdorff_distance_avg)+'\n')
             f.write("Hausdorff Distance Max:"+str(hausdorff_distance_max)+'\n')
 
@@ -268,10 +275,11 @@ def test_single(model, device, input_size, anydepth, image_list, output_save_dir
     if not os.path.exists(results_save_dir_images):
         os.mkdir(results_save_dir_images)
     results = Results(output_save_dir, 0)
-    ch = model.n_channels
+    ch = 1
     for img_path in tqdm(image_list):
         image_name = img_path.split('/')[-1]
         image_name = image_name[:image_name.rfind('.')]
+        results.images.append(image_name)
 
         if anydepth:
             img_org = cv2.resize(cv2.imread(
@@ -307,29 +315,38 @@ def test_single(model, device, input_size, anydepth, image_list, output_save_dir
             img_org_vis = (img_org/256).astype('uint8')
         else:
             img_org_vis = img_org
+        cv2.imwrite(os.path.join(results_save_dir_images,
+                    image_name+'_org.png'), mask_img)
+        cv2.imwrite(os.path.join(results_save_dir_images,
+                    image_name+'_pred.png'), pred_bin_img)
 
-        save_visuals(img_org_vis, mask_img, pred_bin_img,
-                     os.path.join(results_save_dir_images, image_name+'.png')
-                     )
+        # save_visuals(img_org_vis, mask_img, pred_bin_img,
+        #              os.path.join(results_save_dir_images, image_name+'.png')
+        #              )
 
         # save_img_dist = np.hstack(
         #     [img_org, seperater, mask_dist, seperater, pred_dist])
         # cv2.imwrite(os.path.join(results_save_dir_images,
         #             image_name+'_dist.png'), save_img_dist)
 
+    df = {"images": results.images, "recall": results.recall, "precision": results.precision, "f1": results.f1,
+          "dice_score": results.dice_list, "iou_score": results.iou_list}
+    perf_df = pd.DataFrame(df)
+    perf_df.to_csv('results2.csv', index=False)
     results.calculate_metrics(mse=False, g_mean=False,
-                              kappa=False, fdr=False, hausdorff_distance=False)
+                              kappa=False, fdr=False)
 
 
 def test_multitask(model, device, input_size, anydepth, image_list, output_save_dir):
     results_save_dir_images = os.path.join(output_save_dir, 'images')
     if not os.path.exists(results_save_dir_images):
         os.mkdir(results_save_dir_images)
-    results = Results(output_save_dir, 1)
+    results = Results(output_save_dir, 0)
     ch = model.n_channels
     for img_path in tqdm(image_list):
         image_name = img_path.split('/')[-1]
         image_name = image_name[:image_name.rfind('.')]
+        results.images.append(image_name)
 
         if anydepth:
             img_org = cv2.resize(cv2.imread(
@@ -355,7 +372,7 @@ def test_multitask(model, device, input_size, anydepth, image_list, output_save_
 
         _, gt_binary_mask = cv2.threshold(mask_img, 125, 1, cv2.THRESH_BINARY)
 
-        pred_bin, pred_dist, _ = model(img.to(device))
+        pred_bin, pred_dist = model(img.to(device))
         # pred_dist = post_process_reg(pred_dist)
         pred_bin = post_process_binary(pred_bin)
         pred_bin_img = np.array(pred_bin * 255, np.uint8)
@@ -366,11 +383,20 @@ def test_multitask(model, device, input_size, anydepth, image_list, output_save_
             img_org_vis = (img_org/256).astype('uint8')
         else:
             img_org_vis = img_org
-
+        # cv2.imwrite(os.path.join(results_save_dir_images,
+        #             image_name+'_org.png'), mask_img)
+        cv2.imwrite(os.path.join(results_save_dir_images,
+                    image_name+'_pred.png'), pred_bin_img)
         save_visuals(img_org_vis, mask_img, pred_bin_img,
                      os.path.join(results_save_dir_images, image_name+'.png')
                      )
-    results.calculate_metrics(mse=False)
+
+    df = {"images": results.images, "recall": results.recall, "precision": results.precision, "f1": results.f1,
+          "dice_score": results.dice_list, "iou_score": results.iou_list}
+    perf_df = pd.DataFrame(df)
+    perf_df.to_csv('results2.csv', index=False)
+    results.calculate_metrics(mse=False, g_mean=False,
+                              kappa=False, fdr=False)
 
 
 def main(cfg, model_path):
@@ -427,7 +453,8 @@ def main(cfg, model_path):
         else:
             model.to(device="cpu")
 
-        test_multitask(model, device, input_size, image_list, output_save_dir)
+        test_multitask(model, device, input_size,
+                       anydepth, image_list, output_save_dir)
 
     elif model_type == 'attention':
         model = UNet_attention(
@@ -444,7 +471,10 @@ def main(cfg, model_path):
             model.to(device="cpu")
         test_single(model, device, input_size, image_list, output_save_dir)
     elif model_type == 'fourier1':
+        print(initial_filter_size)
         model = UNet_fourier1(ch, num_class, initial_filter_size, use_cuda)
+        print(model)
+
         model.load_state_dict(torch.load(model_path))
         model.eval()
         if use_cuda:
@@ -456,7 +486,8 @@ def main(cfg, model_path):
         else:
             model.to(device="cpu")
 
-        test_multitask(model, device, input_size, image_list, output_save_dir)
+        test_multitask(model, device, input_size, anydepth,
+                       image_list, output_save_dir)
     elif model_type == 'fourier1_2':
         model = UNet_fourier1_2(ch, num_class, initial_filter_size, use_cuda)
         model.load_state_dict(torch.load(model_path))
@@ -480,7 +511,6 @@ if __name__ == "__main__":
     args = parse_args()
     config_path = args.config
     model_path = args.model_path
-    # config_path = 'config.yml'
     with open(config_path, "r") as ymlfile:
         cfg = yaml.safe_load(ymlfile)
     main(cfg, model_path)
