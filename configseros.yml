@@ -1,0 +1,35 @@
+model_config:
+  model: UNet1 #the directory to which the results are saved
+  initial_filter_size: [64]
+  kernel: [3]
+  drop_out_rate: [0.2]
+  input_size: [768, 768]    #[1536, 1536] #h, w 
+  channel: -2
+  num_class: 3
+  model_type: 'TransUnet' #multi_task, attention, fourier1, fourier1_2, single
+  dropout: False
+  anydepth: False
+train_config:
+  loss: dice_bce_mc
+  accuracy: dice_bce_mc
+  optimizer: SGD
+  lr_rate: [0.01]
+  weight_decay: [0]
+  batch_size: [4]
+  epochs: 200
+  early_stop: 20
+  num_workers: 20
+  seed: 35
+  use_cuda: True
+dataset_config:
+  train_path: ['/kuacc/users/ocaki13/hpc_run/serousV1/fold2/train']
+  val_path: ['/kuacc/users/ocaki13/hpc_run/serousV1/fold2/val']
+  test_path: ['/kuacc/users/ocaki13/hpc_run/serousV1/fold2/test']
+  aug_rate: [0]
+  save_dir: seroz_2cls_TransUnet_exp3_macenko_fold2
+  class_names: ['background','liver']
+resume:
+  flag: False
+  path: hd_exp1_123_bs/models/last_epoch.pt
+  epoch: 75
+

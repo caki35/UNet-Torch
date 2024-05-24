@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 import re
 import torch
-from Model import UNet
+from Model import UNet, UNet_attention
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
@@ -44,9 +44,12 @@ def pre_process(img):
 
 
 use_cuda = True
-model_path = '/kuacc/users/ocaki13/hpc_run/workfolder/exp1_ultrasound/models/epoch83.pt'
-model = UNet(1, 5, 64,
-             use_cuda, True, 0.25)
+model_path = '/kuacc/users/ocaki13/hpc_run/workfolder/ultrasound_mc_exp3attention_wodrop_1234/epoch87.pt'
+# model = UNet(1, 4, 64,
+#              use_cuda, False, 0.2)
+
+model = UNet_attention(1, 4, 64,
+                use_cuda, False, 0.2)
 model.load_state_dict(torch.load(model_path))
 model.eval()
 device = "cuda:0"
@@ -54,7 +57,7 @@ dtype = torch.cuda.FloatTensor
 model.to(device=device)
 
 
-val_path = '/kuacc/users/ocaki13/hpc_run/images/cizik'
+val_path = '/kuacc/users/ocaki13/hpc_run/anormal_resized1'
 image_list = get_image_list(val_path)
 
 label_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
@@ -64,8 +67,8 @@ def create_rgb_mask(mask, label_colors):
     rgb_mask = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
     rgb_mask[mask == 1] = label_colors[0]
     rgb_mask[mask == 2] = label_colors[1]
-    rgb_mask[mask == 3] = label_colors[2]
-    rgb_mask[mask == 4] = label_colors[3]
+    rgb_mask[mask == 3] = label_colors[3]
+    #rgb_mask[mask == 4] = label_colors[3]
 
     return rgb_mask
 
@@ -77,9 +80,9 @@ if not os.path.exists(save_dir):
 
 for img_path in tqdm(image_list):
     image_name = img_path.split('/')[-1]
-    image_name = image_name[:image_name.rfind('')]
+    image_name = image_name[:image_name.rfind('.')]
     img_org = cv2.resize(cv2.imread(
-        img_path, 0), (1200, 800))
+        img_path, 0), (800, 800))
 
     img = pre_process(img_org)
     outputs = model(img.to(device))
@@ -92,7 +95,7 @@ for img_path in tqdm(image_list):
     rgb_mask_pred = create_rgb_mask(pred_label_imgs[0], label_colors)
     # rgb_mask_pred = cv2.cvtColor(rgb_mask_pred, cv2.COLOR_BGR2RGB)
 
-    # cv2.imwrite(os.path.join(save_dir, image_name+'.png'), rgb_mask_pred)
+    #cv2.imwrite(os.path.join(save_dir, image_name+'.png'), rgb_mask_pred)
 
     fig, axs = plt.subplots(1, 2)
     fig.set_figheight(6)
@@ -106,3 +109,10 @@ for img_path in tqdm(image_list):
     fig.savefig(os.path.join(save_dir, image_name+'.png'))
     fig.clf()
     plt.close(fig)
+
+    # save
+    folder = img_path.split("/")[-2]
+    save_dir_current = os.path.join(save_dir, folder)
+    if not os.path.exists(save_dir_current):
+        os.mkdir(save_dir_current)
+    cv2.imwrite(os.path.join(save_dir_current, image_name+'_pred.png'),  cv2.cvtColor(rgb_mask_pred, cv2.COLOR_RGB2BGR))

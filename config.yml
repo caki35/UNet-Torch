@@ -3,33 +3,33 @@ model_config:
   initial_filter_size: [32]
   kernel: [3]
   drop_out_rate: [0.2]
-  input_size: [512, 512]    #[1536, 1536] #h, w 
+  input_size: [240, 240]    #[1536, 1536] #h, w 
   channel: 1
-  num_class: 1
-  model_type: 'fourier1' #multi_task, attention, fourier1, fourier1_2, single, FFTNet, fourier1MT
+  num_class: 4
+  model_type: 'TransUnet' #multi_task, attention, fourier1, fourier1_2, single, TransUnet
   dropout: False
-  anydepth: True
+  anydepth: False
 train_config:
-  loss: BCE
-  accuracy: dice_score
-  optimizer: Radam
-  lr_rate: [0.0005]
-  weight_decay: [0.0001]
-  batch_size: [8]
-  epochs: 200
+  loss: dice_bce_mc
+  accuracy: dice_bce_mc
+  optimizer: SGD #SGD
+  lr_rate: [0.01]
+  weight_decay: [0]
+  batch_size: [1]
+  epochs: 5
   early_stop: 20
   num_workers: 20
-  seed: 17
+  seed: [37,94]
   use_cuda: True
 dataset_config:
-  train_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/train'
-  val_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/val'
-  test_path: '/home/caki/desktop/projects/liver/liver_dataset_processed/test'
-  aug_rate: [0]
-  save_dir: results/FTMTout_32_exp7_35/
+  train_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/train']
+  val_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val']
+  test_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/test']
+  augmentation: False
+  save_dir: us_Unet_exp1_fold3_wa_32
   class_names: ['background','liver']
 resume:
   flag: False
-  path: MT2/models/epoch50.pt
-  epoch: 50
+  path: hd_exp1_123_bs/models/last_epoch.pt
+  epoch: 75
 

@@ -1,6 +1,6 @@
 import torch
 from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg_Fourier1, Data_Reg_Fourier1_2
-from loss import calc_loss, MultitaskUncertaintyLoss
+import loss
 from torchvision.utils import make_grid, save_image
 import random
 from Model import UNet, UNet_multitask, UNet_attention, UNet_fourier1, UNet_fourier1_2, UNet_BS
@@ -18,9 +18,13 @@ import yaml
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from Trainer import Trainer
-from test import test_single, test_multitask, get_image_list
-seed = 123
+from TransUnet.vit_seg_modeling import VisionTransformer as ViT_seg
+from TransUnet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+from test_mc5 import test_single, get_image_list
 
+def weights_init(m):
+    if isinstance(m, nn.Conv2d):
+        torch.nn.init.kaiming_uniform_(m.weight)
 
 def parse_args():
     ap = argparse.ArgumentParser()
@@ -129,7 +133,7 @@ def main(cfg):
     kernel_size = cfg['model_config']['kernel'][0]
     model_type = cfg['model_config']['model_type']
     dropout = cfg['model_config']['dropout']
-    dropout_p = 0.25
+    dropout_p = cfg['model_config']['drop_out_rate'][0]
 
     # train configs
     batch_size = cfg['train_config']['batch_size'][0]
@@ -140,111 +144,143 @@ def main(cfg):
     loss_function = cfg['train_config']['loss']
     accuracy_metric = cfg['train_config']['accuracy']
     weight_decay = cfg['train_config']['weight_decay'][0]
-
+    loss.CLASS_NUMBER = cfg['model_config']['num_class']
     # dataset configs
     train_path = cfg['dataset_config']['train_path']
     val_path = cfg['dataset_config']['val_path']
-    aug_rate = cfg['dataset_config']['aug_rate']
-    output_save_dir = cfg['dataset_config']['save_dir']
-    if not os.path.exists(output_save_dir):
-        os.mkdir(output_save_dir)
-    with open(os.path.join(output_save_dir, 'config.json'), 'w') as outfile:
+    test_path = cfg['dataset_config']['test_path']
+    if test_path:
+        test_image_list = get_image_list(test_path[0])
+    else:
+        test_image_list = False
+    save_dir = cfg['dataset_config']['save_dir']
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    with open(os.path.join(save_dir, 'config.json'), 'w') as outfile:
         yaml.dump(cfg, outfile, default_flow_style=False)
 
     anydepth = cfg['model_config']['anydepth']
-    seed_everything(seed)
-    if model_type == 'single':
-        train_dataset = Data_Binary(
-            train_path, ch, anydepth, input_size=input_size)
-        val_dataset = Data_Binary(
-            val_path, ch, anydepth, input_size=input_size)
+    seeds = cfg['train_config']['seed']
+    for currentSeed in seeds:
+        output_save_dir = save_dir+ '_seed'+str(currentSeed)
+        output_save_dir = os.path.join(save_dir,output_save_dir)
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
+            
+        seed_everything(currentSeed)
+        if model_type == 'single':
+            train_dataset = Data_Binary(
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            val_dataset = Data_Binary(
+                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
 
-        model = UNet(ch, num_class, initial_filter_size,
-                     use_cuda, dropout, dropout_p)
-        # model = UNet_BS([1, 32, 64, 128, 256, 512],
-        #                 "parameters", "dropout")
-        # model.apply(weights_init)
+            model = UNet(ch, num_class, initial_filter_size,
+                        use_cuda, dropout, dropout_p)
+            # model = UNet_BS([1, 32, 64, 128, 256, 512],
+            #                  "parameters", "dropout")
+            # model.apply(weights_init)
+        elif model_type == 'TransUnet':
+            
+            train_dataset = Data_Binary(
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            val_dataset = Data_Binary(
+                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            
+            config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
+            config_vit.n_classes = cfg['model_config']['num_class']
+            config_vit.n_skip = 3
+            config_vit.patches.grid = (int(input_size[1] / 16), int(input_size[1] / 16))
 
-    elif model_type == 'multi_task' or model_type == "multi_task_uc":
-        train_dataset = Data_Reg_Binary(
-            train_path, ch, anydepth, input_size=input_size)
-        val_dataset = Data_Reg_Binary(
-            val_path, ch, anydepth, input_size=input_size)
-        model = UNet_multitask(ch, num_class, initial_filter_size, use_cuda)
+            model = ViT_seg(config_vit, img_size=input_size[0], num_classes=cfg['model_config']['num_class']).cuda()
+            model.load_from(weights=np.load("TransUnet/R50+ViT-B_16.npz"))
+        elif model_type == 'multi_task':
+            train_dataset = Data_Reg_Binary(
+                train_path, ch, anydepth, input_size=input_size)
+            val_dataset = Data_Reg_Binary(
+                val_path, ch, anydepth, input_size=input_size)
+            model = UNet_multitask(ch, num_class, initial_filter_size, use_cuda)
 
-    elif model_type == 'attention':
-        train_dataset = Data_Binary(
-            train_path, ch, anydepth, input_size=input_size)
-        val_dataset = Data_Binary(
-            val_path, ch, anydepth, input_size=input_size)
-        model = UNet_attention(ch, num_class, initial_filter_size, use_cuda)
+        elif model_type == 'attention':
+            train_dataset = Data_Binary(
+                train_path, ch, anydepth, input_size=input_size)
+            val_dataset = Data_Binary(
+                val_path, ch, anydepth, input_size=input_size)
+            model = UNet_attention(ch, num_class, initial_filter_size,
+                        use_cuda, dropout, dropout_p)
+        # elif model_type == 'MedSAM':
+        #     sam_model = sam_model_registry[args.model_type](checkpoint=args.checkpoint)
+        #     model = MedSAM(
+        #         image_encoder=sam_model.image_encoder,
+        #         mask_decoder=sam_model.mask_decoder,
+        #         prompt_encoder=sam_model.prompt_encoder,
+        #     ).to(device)
+        #     model.train()
 
-    elif model_type == 'fourier1' or model_type == 'fourier1MT':
-        train_dataset = Data_Reg_Fourier1(
-            train_path, ch, anydepth, input_size=input_size)
-        val_dataset = Data_Reg_Fourier1(
-            val_path, ch, anydepth, input_size=input_size)
-        model = UNet_fourier1(ch, num_class, initial_filter_size, use_cuda)
+        elif model_type == 'fourier1':
+            train_dataset = Data_Reg_Fourier1(
+                train_path, ch, anydepth, input_size=input_size)
+            val_dataset = Data_Reg_Fourier1(
+                val_path, ch, anydepth, input_size=input_size)
+            model = UNet_fourier1(ch, num_class, initial_filter_size, use_cuda)
+        elif model_type == 'fourier1_2':
+            train_dataset = Data_Reg_Fourier1_2(
+                train_path, ch, anydepth, input_size=input_size)
+            val_dataset = Data_Reg_Fourier1_2(
+                val_path, ch, anydepth, input_size=input_size)
+            model = UNet_fourier1_2(ch, num_class, initial_filter_size, use_cuda)
 
-    elif model_type == 'fourier1_2':
-        train_dataset = Data_Reg_Fourier1_2(
-            train_path, ch, anydepth, input_size=input_size)
-        val_dataset = Data_Reg_Fourier1_2(
-            val_path, ch, anydepth, input_size=input_size)
-        model = UNet_fourier1_2(ch, num_class, initial_filter_size, use_cuda)
+        else:
+            raise ValueError('Invalid model_type "%s"' % model_type)
 
-    else:
-        raise ValueError('Invalid model_type "%s"' % model_type)
+        start_epoch = 1
+        if cfg['resume']['flag']:
+            model.load_state_dict(torch.load(cfg['resume']['path']))
+            start_epoch = cfg['resume']['epoch']
+        if use_cuda:
+            print('Gpu available')
+            print(torch.cuda.get_device_name(0))
+            device = "cuda:0"
+            dtype = torch.cuda.FloatTensor
+            model.to(device=device)
+        else:
+            model.to(device="cpu")
 
-    start_epoch = 1
-    if cfg['resume']['flag']:
-        model.load_state_dict(torch.load(cfg['resume']['path']))
-        start_epoch = cfg['resume']['epoch']
-    if use_cuda:
-        print('Gpu available')
-        print(torch.cuda.get_device_name(0))
-        device = "cuda:0"
-        dtype = torch.cuda.FloatTensor
-        model.to(device=device)
-    else:
-        model.to(device="cpu")
+        print(model)
+        print('Train set size:', len(train_dataset))
+        print('Val set size:', len(val_dataset))
+        print('Loss Function:', loss_function)
+        train_loader = DataLoader(
+            train_dataset, batch_size,
+            shuffle=True, num_workers=4, pin_memory=True)
+        val_loader = DataLoader(val_dataset, batch_size,
+                                shuffle=False, num_workers=4, pin_memory=True)
 
-    print(model)
-    print('Train set size:', len(train_dataset))
-    print('Val set size:', len(val_dataset))
-    print('Loss Function:', loss_function)
-    train_loader = DataLoader(
-        train_dataset, batch_size,
-        shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size,
-                            shuffle=False, num_workers=4, pin_memory=True)
+        dataloaders = {
+            'train': train_loader,
+            'val': val_loader
+        }
+        # check_input(dataloaders)
+        # # optimizers
+        if cfg['train_config']['optimizer'] == 'Adam':
+            optimizer = optim.Adam(
+                model.parameters(), lr=lr_rate, weight_decay=weight_decay)
+        elif cfg['train_config']['optimizer'] == 'SGD':
+            optimizer = optim.SGD(model.parameters(), lr=lr_rate, momentum=0.9, weight_decay=0.0001)
+        else:
+            raise ValueError('Invalid otpimizer "%s"' % cfg['train_config']['optimizer'])
 
-    dataloaders = {
-        'train': train_loader,
-        'val': val_loader
-    }
-
-    # check_input(dataloaders)
-    # optimizers
-    optimizer = optim.Adam(
-        model.parameters(), lr=lr_rate, weight_decay=weight_decay)
-    if accuracy_metric in ['dice_score']:
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='max', factor=0.5, patience=30, min_lr=1e-5)
-    else:
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=30, min_lr=1e-5)
-    trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
-                      patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=False, start_epoch=start_epoch)
-    best_model = trainer.train()
-
-    image_list = get_image_list(cfg['dataset_config']['test_path'])
-    if model_type == 'single':
-        test_single(trainer.model, device, input_size, anydepth,
-                    image_list, output_save_dir)
-    else:
-        test_multitask(trainer.model, device, input_size,
-                       anydepth, image_list, output_save_dir)
+        if accuracy_metric in ['dice_score']:
+            lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode='max', factor=0.5, patience=30, min_lr=1e-5)
+        else:
+            lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode='min', factor=0.5, patience=30, min_lr=1e-5)
+        trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
+                        patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=False, start_epoch=start_epoch)
+        best_model = trainer.train()
+        if test_image_list:
+            print('Testing best model:')
+            test_single(trainer.model, device, input_size, cfg['model_config']['num_class'], test_image_list, output_save_dir)
 
 
 if __name__ == "__main__":
