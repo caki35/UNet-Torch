@@ -1,6 +1,6 @@
 model_config:
   model: UNet1 #the directory to which the results are saved
-  initial_filter_size: [32]
+  initial_filter_size: [64]
   kernel: [3]
   drop_out_rate: [0.2]
   input_size: [240, 240]    #[1536, 1536] #h, w 
@@ -14,7 +14,7 @@ train_config:
   accuracy: dice_bce_mc
   optimizer: SGD #SGD
   lr_rate: [0.01]
-  weight_decay: [0]
+  weight_decay: [0.0001]
   batch_size: [1]
   epochs: 5
   early_stop: 20

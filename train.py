@@ -265,7 +265,7 @@ def main(cfg):
             optimizer = optim.Adam(
                 model.parameters(), lr=lr_rate, weight_decay=weight_decay)
         elif cfg['train_config']['optimizer'] == 'SGD':
-            optimizer = optim.SGD(model.parameters(), lr=lr_rate, momentum=0.9, weight_decay=0.0001)
+            optimizer = optim.SGD(model.parameters(), lr=lr_rate, momentum=0.9, weight_decay=weight_decay)
         else:
             raise ValueError('Invalid otpimizer "%s"' % cfg['train_config']['optimizer'])
 
