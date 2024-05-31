@@ -20,7 +20,8 @@ import matplotlib.pyplot as plt
 from Trainer import Trainer
 from TransUnet.vit_seg_modeling import VisionTransformer as ViT_seg
 from TransUnet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
-from test_mc5 import test_single, get_image_list
+from test import test_single, get_image_list
+import pandas as pd
 
 def weights_init(m):
     if isinstance(m, nn.Conv2d):
@@ -151,6 +152,7 @@ def main(cfg):
     test_path = cfg['dataset_config']['test_path']
     if test_path:
         test_image_list = get_image_list(test_path[0])
+        resultsDict = {}
     else:
         test_image_list = False
     save_dir = cfg['dataset_config']['save_dir']
@@ -207,14 +209,7 @@ def main(cfg):
                 val_path, ch, anydepth, input_size=input_size)
             model = UNet_attention(ch, num_class, initial_filter_size,
                         use_cuda, dropout, dropout_p)
-        # elif model_type == 'MedSAM':
-        #     sam_model = sam_model_registry[args.model_type](checkpoint=args.checkpoint)
-        #     model = MedSAM(
-        #         image_encoder=sam_model.image_encoder,
-        #         mask_decoder=sam_model.mask_decoder,
-        #         prompt_encoder=sam_model.prompt_encoder,
-        #     ).to(device)
-        #     model.train()
+
 
         elif model_type == 'fourier1':
             train_dataset = Data_Reg_Fourier1(
@@ -280,8 +275,12 @@ def main(cfg):
         best_model = trainer.train()
         if test_image_list:
             print('Testing best model:')
-            test_single(trainer.model, device, input_size, cfg['model_config']['num_class'], test_image_list, output_save_dir)
-
+            currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+            resultsDict[currentSeed] = currResultsDict
+    
+    df = pd.DataFrame(resultsDict)
+    df = df.transpose()
+    df.to_csv(os.path.join(save_dir,'results.csv'))
 
 if __name__ == "__main__":
     args = parse_args()

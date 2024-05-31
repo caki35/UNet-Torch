@@ -20,6 +20,8 @@ import torchvision.transforms.functional as TF
 
 image_ext = ['.jpg', '.jpeg', '.webp', '.bmp', '.png', '.tif', '.PNG', '.tiff']
 
+SCORE_MAP_FLAG = True
+SAVE_PREDICTION = True
 
 def NoiseFiltering(img, thresh=150):
     unique_labels = np.unique(img)
@@ -60,8 +62,6 @@ def get_image_list(path):
 
 
 #control  PVD  RD
-
-
 label_colors = [(255, 0, 0), (0, 255, 0), (255, 255, 0)]
 
 
@@ -87,18 +87,35 @@ class_names = {0: 'background', 1: 'red', 2: 'green', 3: 'yellow'}
 
 
 
-def preprocess(img_org, input_size):
-    imgHeight, imgWidth = img_org.shape[0], img_org.shape[1]
-    if imgHeight != input_size[0] or imgWidth != input_size[1]:
-        img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth), order=3)  
+def preprocess(img_org, input_size):        
+    if len(img_org.shape)==2:
+        imgHeight, imgWidth = img_org.shape
+        if imgHeight != input_size[0] or imgWidth != input_size[1]:
+            img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth), order=3)  
+        else:
+            img_input = img_org
     else:
-        img_input = img_org
+        imgHeight, imgWidth, _ = img_org.shape
+        if imgHeight != input_size[0] or imgWidth != input_size[1]:
+            img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth, 1), order=3)  
+        else:
+            img_input = img_org
+        
+    
     #z normalizization
     mean3d = np.mean(img_input, axis=(0,1))
     std3d = np.std(img_input, axis=(0,1))
     img_input = (img_input-mean3d)/std3d
     
-    img_input = torch.from_numpy(img_input).unsqueeze(0).unsqueeze(0).float().cuda()
+    if len(img_org.shape)==2:
+        img_input = torch.from_numpy(img_input.astype(np.float32)).unsqueeze(0).unsqueeze(0).cuda()
+    else:  
+        # HWC to CHW, BGR to RGB (for three channel)
+        img_input = img_input.transpose((2, 0, 1))[::-1]
+        print(img_input.shape)
+        img_input = torch.from_numpy(img_input.astype(np.float32)).unsqueeze(0).cuda()
+
+
     
     return img_input
 
@@ -111,6 +128,31 @@ class Results_mc:
         for i in range(self.num_of_class):
             self.class_result_dict[i] = {'precision': [], 'recall': [
             ], 'f1': [], 'dice_score': [], 'iou_score': [], "hausdorff_distance": []}
+            
+    def getResults(self):
+        resultsDict = {}
+        for i in range(self.num_of_class):
+            if i ==0:
+                continue
+            class_name = class_names[i]
+            precision = round(sum(
+            self.class_result_dict[i]['precision'])/len(self.class_result_dict[i]['precision'])*100, 2)
+            recall = round(sum(
+            self.class_result_dict[i]['recall'])/len(self.class_result_dict[i]['recall'])*100, 2)
+            f1_score = round(
+            sum(self.class_result_dict[i]['f1'])/len(self.class_result_dict[i]['f1'])*100, 2)
+            dice_score = round(sum(
+            self.class_result_dict[i]['dice_score'])/len(self.class_result_dict[i]['dice_score'])*100, 2)
+            iou_based_image = round(sum(
+            self.class_result_dict[i]['iou_score'])/len(self.class_result_dict[i]['iou_score'])*100, 2)
+            hd_image = round(sum(
+            self.class_result_dict[i]['hausdorff_distance'])/len(self.class_result_dict[i]['hausdorff_distance']), 2)
+            
+            resultsDict['precision_'+class_name] = precision
+            resultsDict['recall_'+class_name] = recall
+            resultsDict['f1_score_'+class_name] = f1_score
+
+        return resultsDict
 
     def compare(self, y_true, y_pred):
         """
@@ -196,13 +238,17 @@ class Results_mc:
             f.write("\n")
         f.close()
 
-def test_single(model, device, input_size, numClass, image_list, save_dir):
+def test_single(model, device, input_size, ch, numClass, image_list, save_dir):
     results = Results_mc(save_dir, numClass)
     for img_path in tqdm(image_list):
         image_name = img_path.split('/')[-1]
         image_name = image_name[:image_name.rfind('')]
-        img_org = cv2.imread(img_path, 0)
-
+        
+        if ch==1:
+            img_org = cv2.imread(img_path, 0)
+        elif ch==3:
+            img_org = cv2.imread(img_path)
+        
         img_input = preprocess(img_org, input_size)
         imgHeight, imgWidth = img_org.shape[0], img_org.shape[1]
         model.to(device=device)
@@ -224,36 +270,43 @@ def test_single(model, device, input_size, numClass, image_list, save_dir):
         mask = cv2.imread(mask_path, 0)
         # create rgb masks
         rgb_mask = create_rgb_mask(mask, label_colors)
-
-        score1 = probs[0, 1, :, :] * 255
-        score2 = probs[0, 2, :, :] * 255
-        score3 = probs[0, 3, :, :] * 255
-
-        score1_img = score1.astype(np.uint8)
-        score2_img = score2.astype(np.uint8)
-        score3_img = score3.astype(np.uint8)
         rgb_mask_pred = create_rgb_mask(pred, label_colors)
         
-        currentSaveFolder = img_path.split('/')[-2]
-        currentSaveDir = os.path.join(save_dir, currentSaveFolder)
-        if not os.path.exists(currentSaveDir):
-            os.mkdir(currentSaveDir)
-        cv2.imwrite(os.path.join(currentSaveDir, image_name+'_pred.png'), pred)
+        ### compare pred with gt
         results.compare(mask, pred)
-        fig, axs = plt.subplots(1, 3)
-        fig.set_figheight(8)
-        fig.set_figwidth(16)
-        axs[0].imshow(score1_img, cmap='gray')
-        axs[0].title.set_text('class 1 (red)')
-        axs[1].imshow(score2_img, cmap='gray')
-        axs[1].title.set_text('class 2 (green)')
-        axs[2].imshow(score3_img, cmap='gray')
-        axs[2].title.set_text('class 3 (yellow)')
-        # axs[1, 1].imshow(score4_img, cmap='gray')
-        # axs[1, 1].title.set_text('class 4 (yellow)')
-        fig.savefig(os.path.join(save_dir, image_name+'_probdist.png'))
-        fig.clf()
-        plt.close(fig)
+
+        ### score map
+        if SCORE_MAP_FLAG:
+            score1 = probs[0, 1, :, :] * 255
+            score2 = probs[0, 2, :, :] * 255
+            score3 = probs[0, 3, :, :] * 255
+
+            score1_img = score1.astype(np.uint8)
+            score2_img = score2.astype(np.uint8)
+            score3_img = score3.astype(np.uint8)
+            
+            fig, axs = plt.subplots(1, 3)
+            fig.set_figheight(8)
+            fig.set_figwidth(16)
+            axs[0].imshow(score1_img, cmap='gray')
+            axs[0].title.set_text('class 1 (red)')
+            axs[1].imshow(score2_img, cmap='gray')
+            axs[1].title.set_text('class 2 (green)')
+            axs[2].imshow(score3_img, cmap='gray')
+            axs[2].title.set_text('class 3 (yellow)')
+            # axs[1, 1].imshow(score4_img, cmap='gray')
+            # axs[1, 1].title.set_text('class 4 (yellow)')
+            fig.savefig(os.path.join(save_dir, image_name+'_probdist.png'))
+            fig.clf()
+            plt.close(fig)
+            
+        ## save predicted images
+        if SAVE_PREDICTION:
+            currentSaveFolder = img_path.split('/')[-2]
+            currentSaveDir = os.path.join(save_dir, currentSaveFolder)
+            if not os.path.exists(currentSaveDir):
+                os.mkdir(currentSaveDir)
+            cv2.imwrite(os.path.join(currentSaveDir, image_name+'_pred.png'), pred)
 
         seperater = np.zeros([img_org.shape[0], 15, 3], dtype=np.uint8)
         seperater.fill(155)
@@ -265,13 +318,19 @@ def test_single(model, device, input_size, numClass, image_list, save_dir):
 
         rgb_mask = cv2.cvtColor(rgb_mask, cv2.COLOR_BGR2RGB)
         rgb_mask_pred = cv2.cvtColor(rgb_mask_pred, cv2.COLOR_BGR2RGB)
-
-        save_img_bin = np.hstack(
-            [cv2.cvtColor(img_org, cv2.COLOR_GRAY2RGB), seperater, rgb_mask, seperater, rgb_mask_pred])
+        if ch ==1:
+            save_img_bin = np.hstack(
+                [cv2.cvtColor(img_org, cv2.COLOR_GRAY2RGB), seperater, rgb_mask, seperater, rgb_mask_pred])
+        elif ch ==3:
+            save_img_bin = np.hstack(
+                [img_org, seperater, rgb_mask, seperater, rgb_mask_pred])
         cv2.imwrite(os.path.join(save_dir, image_name+'.png'), save_img_bin)
 
 
+
     results.calculate_metrics()
+    currRes = results.getResults()
+    return currRes
 
 
 def main():
@@ -286,6 +345,7 @@ def main():
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
     Num_Class = 4
+    ch = 3
     
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -307,7 +367,7 @@ def main():
     model.load_state_dict(torch.load(model_path))
     model.eval()
 
-    test_single(model, device, input_size, Num_Class, image_list, save_dir)
+    resultsDict = test_single(model, device, input_size, ch, Num_Class, image_list, save_dir)
     
 if __name__ == "__main__":
     main()

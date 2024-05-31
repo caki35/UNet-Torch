@@ -16,17 +16,17 @@ train_config:
   lr_rate: [0.01]
   weight_decay: [0.0001]
   batch_size: [1]
-  epochs: 5
+  epochs: 10
   early_stop: 20
   num_workers: 20
-  seed: [37,94]
+  seed: [7,35]
   use_cuda: True
 dataset_config:
-  train_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/train']
-  val_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val']
-  test_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/test']
+  train_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val/']
+  val_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val/']
+  test_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val/']
   augmentation: False
-  save_dir: us_Unet_exp1_fold3_wa_32
+  save_dir: onurdeneme
   class_names: ['background','liver']
 resume:
   flag: False
