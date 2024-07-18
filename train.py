@@ -142,8 +142,8 @@ def main(cfg):
     lr_rate = cfg['train_config']['lr_rate'][0]
     Epoch = cfg['train_config']['epochs']
     use_cuda = cfg['train_config']['use_cuda']
-    loss_function = cfg['train_config']['loss']
-    accuracy_metric = cfg['train_config']['accuracy']
+    loss_function = cfg['train_config']['train_loss']
+    accuracy_metric = cfg['train_config']['val_loss']
     weight_decay = cfg['train_config']['weight_decay'][0]
     loss.CLASS_NUMBER = cfg['model_config']['num_class']
     # dataset configs
