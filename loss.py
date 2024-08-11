@@ -366,4 +366,112 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         loss = HausdorffERLoss()(pred, target, debug=False)
     if loss_type == "ActiveContourLoss":
         loss = ActiveContourLoss()(pred, target)
+
+    ###############################################
+
+    def to_one_hot(target, cls_count):
+        sh = list(target.size())  
+        sh.insert(1, cls_count)
+        tar = torch.zeros(sh, dtype=int, device=target.device)
+
+        for i in range(cls_count):
+            tar[:,i, target[0]==i] = 1
+        return tar
+
+    def diff_func(target, pr):
+        tar = to_one_hot(target, pr.shape[1])
+        ret = 1 + (tar - pr)
+        return ret
+    
+    if loss_type == "dummy_custom_bce":        #Can be used as a virus.
+
+        sh = target[0].shape
+        N = sh[0]*sh[1]
+        class_count = pred.shape[1]
+        epsilon = 1e-100
+
+        pr = torch.softmax(pred, dim=1)
+        diff = diff_func(target, pr)
+        
+        for x in range(sh[0]):
+            for y in range(sh[1]):
+                lab = int(target[0][x][y].item())
+                loss += (diff[0][lab][x][y] * torch.log(pr[0][lab][x][y]+epsilon))
+        loss = loss/-N
+
+    if loss_type == "custom_bce":
+        
+        sh = target[0].shape
+        N = sh[0]*sh[1]
+        class_count = pred.shape[1]
+        epsilon = 1e-100
+
+        pr = torch.softmax(pred, dim=1)
+        diff = diff_func(target, pr)
+
+        loss = 0
+        for cls in range(class_count):
+            cur_label = target==cls
+            selected_pr = pr[:, cls][cur_label]
+            selected_diff = diff[:, cls][cur_label]
+            weighted_bce = torch.sum(torch.log(selected_pr + epsilon)*selected_diff)/(-N)
+            loss += weighted_bce
+
+    if loss_type == "pseudo_custom_bce":
+        
+        sh = target[0].shape
+        N = sh[0]*sh[1]
+        class_count = pred.shape[1]
+        epsilon = 1e-100
+
+        pr = torch.softmax(pred, dim=1)
+        #diff = diff_func(target, pr)
+
+        loss = 0
+        for cls in range(class_count):
+            cur_label = target==cls
+            selected_pr = pr[0, cls][cur_label[0]]
+            #selected_diff = diff[:, cls][cur_label]
+            weighted_bce = torch.sum(torch.log(selected_pr + epsilon))/(-N)              #weighted_bce = torch.sum(torch.log(selected_pr + epsilon)*selected_diff)
+            
+            loss += weighted_bce
+
+    if loss_type == "weighted_mse":
+        sh = target[0].shape
+        N = sh[0]*sh[1]
+        class_count = pred.shape[1]
+        epsilon = 1e-10
+        
+        pr = torch.softmax(pred, dim=1)
+        tar = to_one_hot(target, class_count)
+
+        loss = 0
+        for cls in range(class_count):
+            cur_label = target==cls
+            class_weight = N/(torch.sum(cur_label)+epsilon)         # epsilon is for the classes with 0 elements
+
+            selected_pr = pr[:, cls][cur_label]
+            selected_target = tar[:, cls][cur_label]
+            weighted = class_weight * torch.sum(torch.square(selected_target-selected_pr))/(N)
+            loss += weighted
+
+    # if loss_type == "weighted_sse":
+    #     sh = target[0].shape
+    #     class_count = pred.shape[1]
+    #     N = sh[0]*sh[1]
+    #     epsilon = 1e-10
+        
+    #     pr = torch.softmax(pred, dim=1)
+    #     tar = to_one_hot(target, class_count)
+
+    #     loss = 0
+    #     for cls in range(class_count):
+    #         cur_label = target==cls
+    #         class_weight = N/(torch.sum(cur_label)+epsilon) 
+
+    #         selected_pr = pr[:, cls][cur_label]
+    #         selected_target = tar[:, cls][cur_label]
+    #         weighted_bce = class_weight * torch.sum(torch.square(selected_target-selected_pr))
+    #         loss += weighted_bce
+    
     return loss

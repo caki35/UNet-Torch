@@ -62,7 +62,7 @@ def get_image_list(path):
 
 
 #control  PVD  RD
-label_colors = [(255, 0, 0), (0, 255, 0), (255, 255, 0)]
+label_colors = [(111, 78, 55), (255, 0, 0), (0, 255, 0), (0, 0, 255)]
 
 
 def create_rgb_mask(mask, label_colors):
@@ -70,7 +70,7 @@ def create_rgb_mask(mask, label_colors):
     rgb_mask[mask == 1] = label_colors[0]
     rgb_mask[mask == 2] = label_colors[1]
     rgb_mask[mask == 3] = label_colors[2]
-    # rgb_mask[mask == 4] = label_colors[3]
+    rgb_mask[mask == 4] = label_colors[3]
 
     return rgb_mask
 
@@ -78,12 +78,12 @@ def create_rgb_mask(mask, label_colors):
 
 
 
-class_names = {0: 'background', 1: 'red', 2: 'green', 3: 'yellow'}
+class_names = {0: 'background', 1: 'brown', 2: 'red', 3: 'green', 4: 'blue'}
 
-# red = 1;
-# green = 2;
-# yellow = 4;
-# blue = 3;
+# coffee = 1;
+# red = 2;
+# green = 3;
+# blue = 4;
 
 
 
@@ -114,8 +114,6 @@ def preprocess(img_org, input_size):
         img_input = img_input.transpose((2, 0, 1))[::-1]
         print(img_input.shape)
         img_input = torch.from_numpy(img_input.astype(np.float32)).unsqueeze(0).cuda()
-
-
     
     return img_input
 
@@ -356,8 +354,8 @@ def main():
         config_vit.n_classes = Num_Class
         config_vit.n_skip = 3
         config_vit.patches.size = (patch_size, patch_size)
-        config_vit.patches.grid = (int(img_size[0]/patch_size), int(img_size[1]/patch_size))
-        model = ViT_seg(config_vit, img_size=img_size[0], num_classes=4).cuda()
+        config_vit.patches.grid = (int(input_size[0]/patch_size), int(input_size[1]/patch_size))
+        model = ViT_seg(config_vit, img_size=input_size[0], num_classes=Num_Class).cuda()
     elif modelType == 'Unet':
         model = UNet(1, Num_Class, 64,
                     use_cuda, False, 0.2)

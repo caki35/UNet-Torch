@@ -10,10 +10,11 @@ from torch import optim
 
 
 class Trainer():
-    def __init__(self, model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer, patience, num_epochs, loss_function, accuracy_metric,  lr_scheduler=None, start_epoch=1):
+    def __init__(self, model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer, patience, num_epochs, loss_function, accuracy_metric, lr_rate, adaptive_lr=False, lr_scheduler=None, start_epoch=1):
         self.model = model
         self.dataloader = dataloaders
         self.optimizer = optimizer
+        self.lr_rate = lr_rate
         self.start_epoch = start_epoch
         self.num_epochs = num_epochs
         self.patience = patience
@@ -42,6 +43,7 @@ class Trainer():
 
         self.train_loss_list_2 = []
         self.val_loss_list_2 = []
+        self.adaptive_lr = adaptive_lr
         self.early_stop_counter = 0
 
         self.save_dir_model = os.path.join(self.output_save_dir, 'models/')
@@ -281,7 +283,7 @@ class Trainer():
 
         total_memory = f'{torch.cuda.get_device_properties(0).total_memory/ 1E9 if torch.cuda.is_available() else 0:.3g}G'
         # gamma = 100
-        base_lr = 0.01
+        base_lr = self.lr_rate
         max_iterations = self.num_epochs * len(self.dataloader['train'])  
         iter_num = 0
         
@@ -335,7 +337,7 @@ class Trainer():
                                 self.optimizer.zero_grad()
                                 loss.backward()
                                 self.optimizer.step()
-                                if True:
+                                if self.adaptive_lr:
                                     lr_ = base_lr * (1.0 - iter_num / max_iterations) ** 0.9
                                     for param_group in self.optimizer.param_groups:
                                         param_group['lr'] = lr_

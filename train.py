@@ -140,6 +140,7 @@ def main(cfg):
     batch_size = cfg['train_config']['batch_size'][0]
     num_workers = cfg['train_config']['num_workers']
     lr_rate = cfg['train_config']['lr_rate'][0]
+    adaptive_lr = cfg['train_config']['adaptive_lr']
     Epoch = cfg['train_config']['epochs']
     use_cuda = cfg['train_config']['use_cuda']
     loss_function = cfg['train_config']['train_loss']
@@ -271,7 +272,7 @@ def main(cfg):
             lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, mode='min', factor=0.5, patience=30, min_lr=1e-5)
         trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
-                        patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=False, start_epoch=start_epoch)
+                        patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric,lr_rate=lr_rate, adaptive_lr=adaptive_lr, lr_scheduler=False, start_epoch=start_epoch)
         best_model = trainer.train()
         if test_image_list:
             print('Testing best model:')

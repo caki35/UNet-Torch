@@ -11,7 +11,7 @@ from skimage.color import rgb2hed
 from torchvision import transforms
 from scipy import ndimage
 from scipy.ndimage.interpolation import zoom
-import staintools
+# import staintools
 
 image_ext = ['.jpg', '.jpeg', '.webp', '.bmp', '.png', '.tif', '.PNG', '.tiff']
 
@@ -181,12 +181,12 @@ class Data_Binary(Dataset):
         # transforms.ToTensor(),
         # transforms.Normalize([0.5], [0.5])
         # ])
-        if self.channel == -2:
-            REFERENCE_PATH = "/kuacc/users/ocaki13/hpc_run/workfolder/color_normalizer.npy"
-            REF = np.load(REFERENCE_PATH)
+        # if self.channel == -2:
+        #     REFERENCE_PATH = "/kuacc/users/ocaki13/hpc_run/workfolder/color_normalizer.npy"
+        #     REF = np.load(REFERENCE_PATH)
 
-            self.NORMALIZER = staintools.StainNormalizer(method='macenko')
-            self.NORMALIZER.fit(REF)
+        #     self.NORMALIZER = staintools.StainNormalizer(method='macenko')
+        #     self.NORMALIZER.fit(REF)
         
     def transform(self, sample):
         image, label = sample['image'], sample['label']
