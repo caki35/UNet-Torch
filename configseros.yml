@@ -10,8 +10,8 @@ model_config:
   dropout: False
   anydepth: False
 train_config:
-  loss: dice_bce_mc
-  accuracy: dice_bce_mc
+  train_loss: dice_bce_mc
+  val_loss: dice_bce_mc
   optimizer: SGD
   lr_rate: [0.01]
   weight_decay: [0]
