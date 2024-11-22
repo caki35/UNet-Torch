@@ -114,8 +114,6 @@ def preprocess(img_org, input_size):
         img_input = img_input.transpose((2, 0, 1))[::-1]
         print(img_input.shape)
         img_input = torch.from_numpy(img_input.astype(np.float32)).unsqueeze(0).cuda()
-
-
     
     return img_input
 
@@ -336,12 +334,12 @@ def test_single(model, device, input_size, ch, numClass, image_list, save_dir):
 def main():
     
     save_dir = 'res3'
-    test_path = '/kuacc/users/ocaki13/hpc_run/ultrasoundSegmentationDatasetv2_resized/fold3/test'
+    test_path = '/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/test/'
     image_list = get_image_list(test_path)
     modelType = 'TransUnet' #Unet
     input_size = (800,800)
     use_cuda = True
-    model_path = '/kuacc/users/ocaki13/hpc_run/workfolder/us_TransUnet_exp1_fold3_wa/epoch42.pt'
+    model_path = '/home/ocaki13/projects/ultrasound/segmentationResults/exp4/us_exp4_wouaug_fold1/us_exp4_wouaug_fold1_seed629/epoch16.pt'
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
     Num_Class = 4
@@ -356,8 +354,8 @@ def main():
         config_vit.n_classes = Num_Class
         config_vit.n_skip = 3
         config_vit.patches.size = (patch_size, patch_size)
-        config_vit.patches.grid = (int(img_size[0]/patch_size), int(img_size[1]/patch_size))
-        model = ViT_seg(config_vit, img_size=img_size[0], num_classes=4).cuda()
+        config_vit.patches.grid = (int(input_size[0]/patch_size), int(input_size[1]/patch_size))
+        model = ViT_seg(config_vit, img_size=input_size[0], num_classes=Num_Class).cuda()
     elif modelType == 'Unet':
         model = UNet(1, Num_Class, 64,
                     use_cuda, False, 0.2)

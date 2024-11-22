@@ -1,5 +1,5 @@
 import torch
-from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg_Fourier1, Data_Reg_Fourier1_2
+from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg, Data_Reg_MT
 import loss
 from torchvision.utils import make_grid, save_image
 import random
@@ -19,8 +19,11 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from Trainer import Trainer
 from TransUnet.vit_seg_modeling import VisionTransformer as ViT_seg
+from TransUnet.vit_seg_modeling import VisionTransformerMultitask as ViT_seg_MT
 from TransUnet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from test import test_single, get_image_list
+from test_mc3serousv5 import test_single_mc
+from test_reg3serousv5mt import test_multiple_reg
 import pandas as pd
 
 def weights_init(m):
@@ -140,6 +143,7 @@ def main(cfg):
     batch_size = cfg['train_config']['batch_size'][0]
     num_workers = cfg['train_config']['num_workers']
     lr_rate = cfg['train_config']['lr_rate'][0]
+    adaptive_lr = cfg['train_config']['adaptive_lr']
     Epoch = cfg['train_config']['epochs']
     use_cuda = cfg['train_config']['use_cuda']
     loss_function = cfg['train_config']['loss']
@@ -166,10 +170,10 @@ def main(cfg):
     for currentSeed in seeds:
         output_save_dir = save_dir+ '_seed'+str(currentSeed)
         output_save_dir = os.path.join(save_dir,output_save_dir)
-        if not os.path.exists(save_dir):
-            os.mkdir(save_dir)
-            
+        if not os.path.exists(output_save_dir):
+            os.mkdir(output_save_dir)
         seed_everything(currentSeed)
+        
         if model_type == 'single':
             train_dataset = Data_Binary(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
@@ -178,11 +182,30 @@ def main(cfg):
 
             model = UNet(ch, num_class, initial_filter_size,
                         use_cuda, dropout, dropout_p)
-            # model = UNet_BS([1, 32, 64, 128, 256, 512],
-            #                  "parameters", "dropout")
-            # model.apply(weights_init)
-        elif model_type == 'TransUnet':
+        
+        elif model_type == 'regression':
+            train_dataset = Data_Reg(
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            val_dataset = Data_Reg(
+                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            model = UNet(ch, num_class, initial_filter_size,
+                        use_cuda, dropout, dropout_p)
             
+        elif model_type == 'regression_t':
+            train_dataset = Data_Reg(
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            val_dataset = Data_Reg(
+                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+
+            config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
+            config_vit.n_classes = cfg['model_config']['num_class']
+            config_vit.n_skip = 3
+            config_vit.patches.grid = (int(input_size[1] / 16), int(input_size[1] / 16))
+
+            model = ViT_seg(config_vit, img_size=input_size[0], num_classes=cfg['model_config']['num_class']).cuda()
+            model.load_from(weights=np.load("TransUnet/R50+ViT-B_16.npz"))
+        
+        elif model_type == 'TransUnet':
             train_dataset = Data_Binary(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Binary(
@@ -192,16 +215,36 @@ def main(cfg):
             config_vit.n_classes = cfg['model_config']['num_class']
             config_vit.n_skip = 3
             config_vit.patches.grid = (int(input_size[1] / 16), int(input_size[1] / 16))
-
             model = ViT_seg(config_vit, img_size=input_size[0], num_classes=cfg['model_config']['num_class']).cuda()
             model.load_from(weights=np.load("TransUnet/R50+ViT-B_16.npz"))
+            
         elif model_type == 'multi_task':
             train_dataset = Data_Reg_Binary(
                 train_path, ch, anydepth, input_size=input_size)
             val_dataset = Data_Reg_Binary(
                 val_path, ch, anydepth, input_size=input_size)
             model = UNet_multitask(ch, num_class, initial_filter_size, use_cuda)
-
+        
+        elif model_type == 'multi_task_reg':
+            train_dataset = Data_Reg_MT(
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            val_dataset = Data_Reg_MT(
+                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            model = UNet_multitask(ch, num_class, initial_filter_size, use_cuda)
+        
+        elif model_type == 'multi_task_regTU':
+            train_dataset = Data_Reg_MT(
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            val_dataset = Data_Reg_MT(
+                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+            
+            config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
+            config_vit.n_classes = cfg['model_config']['num_class']
+            config_vit.n_skip = 3
+            config_vit.patches.grid = (int(input_size[1] / 16), int(input_size[1] / 16))
+            model = ViT_seg_MT(config_vit, img_size=input_size[0], num_classes=cfg['model_config']['num_class']).cuda()
+            model.load_from(weights=np.load("TransUnet/R50+ViT-B_16.npz"))
+                                    
         elif model_type == 'attention':
             train_dataset = Data_Binary(
                 train_path, ch, anydepth, input_size=input_size)
@@ -209,21 +252,6 @@ def main(cfg):
                 val_path, ch, anydepth, input_size=input_size)
             model = UNet_attention(ch, num_class, initial_filter_size,
                         use_cuda, dropout, dropout_p)
-
-
-        elif model_type == 'fourier1':
-            train_dataset = Data_Reg_Fourier1(
-                train_path, ch, anydepth, input_size=input_size)
-            val_dataset = Data_Reg_Fourier1(
-                val_path, ch, anydepth, input_size=input_size)
-            model = UNet_fourier1(ch, num_class, initial_filter_size, use_cuda)
-        elif model_type == 'fourier1_2':
-            train_dataset = Data_Reg_Fourier1_2(
-                train_path, ch, anydepth, input_size=input_size)
-            val_dataset = Data_Reg_Fourier1_2(
-                val_path, ch, anydepth, input_size=input_size)
-            model = UNet_fourier1_2(ch, num_class, initial_filter_size, use_cuda)
-
         else:
             raise ValueError('Invalid model_type "%s"' % model_type)
 
@@ -244,12 +272,16 @@ def main(cfg):
         print('Train set size:', len(train_dataset))
         print('Val set size:', len(val_dataset))
         print('Loss Function:', loss_function)
+        # train_loader = DataLoader(
+        #     train_dataset, batch_size,
+        #     shuffle=True, num_workers=4, pin_memory=True)
+        # val_loader = DataLoader(val_dataset, batch_size,
+        #                         shuffle=False, num_workers=4, pin_memory=True)
         train_loader = DataLoader(
             train_dataset, batch_size,
-            shuffle=True, num_workers=4, pin_memory=True)
+            shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size,
-                                shuffle=False, num_workers=4, pin_memory=True)
-
+                                shuffle=False)
         dataloaders = {
             'train': train_loader,
             'val': val_loader
@@ -271,15 +303,22 @@ def main(cfg):
             lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, mode='min', factor=0.5, patience=30, min_lr=1e-5)
         trainer = Trainer(model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer,
-                        patience=30, num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=False, start_epoch=start_epoch)
+                        patience=cfg['train_config']['early_stop'], num_epochs=Epoch, loss_function=loss_function, accuracy_metric=accuracy_metric, lr_scheduler=adaptive_lr, start_epoch=start_epoch)
         best_model = trainer.train()
         if test_image_list:
             print('Testing best model:')
-            currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+            if model_type in ['attention', 'single', 'TransUnet']:
+                #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+            elif model_type in ['multi_task_regTU','multi_task_reg', 'fourier1']:
+                currResultsDict = test_multiple_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+            else:
+                continue
             resultsDict[currentSeed] = currResultsDict
     
     df = pd.DataFrame(resultsDict)
     df = df.transpose()
+    df = df.sort_index()
     df.to_csv(os.path.join(save_dir,'results.csv'))
 
 if __name__ == "__main__":

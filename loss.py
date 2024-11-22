@@ -212,41 +212,6 @@ class HausdorffDTLoss(nn.Module):
             return loss
 
 
-# class DiceLoss(nn.Module):
-#     def __init__(self, smooth=1e-6, multiclass=False):
-#         super(DiceLoss, self).__init__()
-#         self.smooth = smooth
-#         self.multiclass = multiclass
-
-#     def dice_score(self, inputs, targets):
-#         inputs = F.sigmoid(inputs)
-
-#         inputs = inputs.view(-1)
-#         targets = targets.view(-1)
-
-#         intersection = (inputs * targets).sum()
-#         dice_score = (2.*intersection + self.smooth) / \
-#             (inputs.sum() + targets.sum() + self.smooth)
-#         return dice_score
-
-#     def dice_score_mc(self, inputs, targets):
-#         inputs = F.softmax(inputs)
-#         targets = F.one_hot(
-#             targets.long(), 4).permute(0, 3, 1, 2)
-#         inputs = inputs.flatten(0, 1)
-#         targets = targets.flatten(0, 1)
-#         intersection = (inputs * targets).sum()
-#         dice_score = (2.*intersection + self.smooth) / \
-#             (inputs.sum() + targets.sum() + self.smooth)
-#         return dice_score
-
-#     def forward(self, inputs, targets):
-#         if self.multiclass:
-#             dice_score = self.dice_score_mc(inputs, targets)
-#         else:
-#             dice_score = self.dice_score(inputs, targets)
-#         return 1 - dice_score
-
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
         super(DiceLoss, self).__init__()
@@ -285,45 +250,153 @@ class DiceLoss(nn.Module):
             loss += dice * weight[i]
         return loss / self.n_classes
 
-# ce_loss = nn.CrossEntropyLoss()
-# dice_loss = DiceLoss(4)
-
 
 class MultitaskUncertaintyLoss(nn.Module):
     def __init__(self):
         super(MultitaskUncertaintyLoss, self).__init__()
 
-    # def forward(self, loss_values, log_var_tasks):
-    #     total_loss = 0
-    #     loss_cls, loss_reg = loss_values
-    #     log_var_task1, log_var_task2 = log_var_tasks
-    #     total_loss += (loss_cls.cpu() / (2*torch.exp(2 * log_var_task1))) + log_var_task1
-    #     total_loss += (loss_reg.cpu() / torch.exp(2 * log_var_task2)) + log_var_task2
-    #     return total_loss
-
-    # def forward(self, loss_values, log_var_tasks):
-    #     total_loss = 0
-    #     loss_cls, loss_reg = loss_values
-    #     log_var_task1, log_var_task2 = log_var_tasks
-    #     total_loss += loss_cls.cpu() * torch.exp(-log_var_task1) + log_var_task1
-    #     total_loss += loss_reg.cpu() * torch.exp(-log_var_task2) + log_var_task2
-    #     return total_loss/2
-
-    def forward(self, loss_values, log_var_tasks):
+    def forward(self, loss_values, log_var_tasks, regg_flag):
         total_loss = 0
         for i in range(0, len(loss_values)):
-            total_loss += loss_values[i].cpu() * \
-                torch.exp(-log_var_tasks[i]) + log_var_tasks[i]
-        return total_loss/len(loss_values)
+            dtype = loss_values[i].dtype
+            device = loss_values[i].device
+            stds = (
+                torch.exp(log_var_tasks[i])**(1/2)).to(device).to(dtype)
+            if regg_flag[i]:
+                coeff = 1 / (2*(stds**2))
+            else:
+                coeff = 1 / (stds**2)
+            total_loss += coeff*loss_values[i] + torch.log(stds)
+        return total_loss
 
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=.25, gamma=2, logits=True):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.logits = logits
+
+    def forward(self, inputs, targets):
+        #pt -> true probability
+        if self.logits:
+            BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduce=False) #-log(pt)
+        else:
+            BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss #0.25* (1-pt)^gamma *-log(pt)
+        return torch.mean(F_loss)
+
+def flatten(input, target):
+    num_class = input.size(1)
+    #B, C, H, W -> # B, H, W, C 
+    input = input.permute(0, 2, 3, 1).contiguous()
+    
+    input_flatten = input.view(-1, num_class)
+    target_flatten = target.view(-1)
+        
+    return input_flatten, target_flatten 
+
+class TopKLoss(nn.BCEWithLogitsLoss):
+    def __init__(self, topk=2):
+        super().__init__(reduction='none')
+        self.topk = topk
+    def forward(self, pred, target):
+        pred, target = flatten(pred, target)
+        pred = pred[:, 0]
+        #foreground prob
+        foreground_prob = F.sigmoid(pred)
+        #backround prob
+        background_prob = 1-foreground_prob
+        #select ground-truth probability
+        input_prob = torch.gather(torch.stack((background_prob, foreground_prob), dim=1), 1, target.unsqueeze(1).long())
+        input_prob = input_prob[:,0]
+        # select indices of lowest probabilities
+        values, indices = torch.topk(input_prob, len(target)//self.topk, largest=False)
+        #BCE loss with logits
+        cross_entropy = super().forward(pred, target)
+
+        # Create a mask
+        mask = torch.zeros_like(cross_entropy)  
+        mask[indices] = 1  # Set True for the indices to consider
+
+        loss = cross_entropy[mask > 0].mean()  # Average only the selected losses
+        return loss
+
+class FocalTverskyLoss(nn.Module):
+    # When α = β = 0.5 it reduces to the Dice coefficient
+    # and when α = β = 1 it reduces to the IoU.
+    def __init__(self, smooth=1.0, alpha=0.5, beta=0.5, gamma=1):
+        super(FocalTverskyLoss, self).__init__()
+        self.smooth = smooth
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+
+    def forward(self, pred, target):
+        pred, target = flatten(pred, target)
+
+        # target = B*H*W
+        # pred = B*H*W, C
+        num_classes = pred.size(1)
+        if num_classes==1:
+            pred = pred[:, 0]
+            pred = F.sigmoid(pred)
+            t_p = (pred * target).sum()
+            f_p = ((1-target) * pred).sum()
+            f_n = (target * (1-pred)).sum()
+            tversky = (t_p + self.smooth) / (t_p + self.alpha*f_p + self.beta*f_n + self.smooth)
+            loss = (1 - tversky)**self.gamma
+        else:
+            pred = F.softmax(pred, dim=1)
+            losses = []
+            for c in range(num_classes):
+                target_c = (target == c).float()
+                input_c = pred[:, c]
+                
+                t_p = (input_c * target_c).sum()
+                f_p = ((1-target_c) * input_c).sum()
+                f_n = (target_c * (1-input_c)).sum()
+                tversky = (t_p + self.smooth) / (t_p + self.alpha*f_p + self.beta*f_n + self.smooth)
+                focal_tversky = (1 - tversky)**self.gamma
+                losses.append(focal_tversky)
+            
+            losses = torch.stack(losses)
+            loss = losses.mean()
+        return loss
 
 def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
     if loss_type == 'BCE':
-        loss = nn.BCEWithLogitsLoss()(pred, target)
+        loss = nn.BCEWithLogitsLoss()(pred.squeeze(1), target)
+    if loss_type == 'TopK':
+        loss = TopKLoss()(pred, target)
+    if loss_type == 'BCE_HEM':
+        batchBase = False
+        loss = nn.BCEWithLogitsLoss(reduction='none')(pred.squeeze(1), target)
+        #loss = torch.mean(loss)i
+        if batchBase:
+            loss = torch.mean(loss, axis=(1,2))
+            # Select the top 4 losses
+            topk_losses, topk_indices = torch.topk(loss, 2)
+            mask = torch.zeros_like(loss)
+            mask[topk_indices] = 1
+            # Apply the mask to losses to keep only the selected ones
+            masked_loss = (loss * mask).sum() / mask.sum()  # Mean of selected losses
+            
+        else:
+            loss_f = loss.flatten()
+            topk_losses, topk_indices = torch.topk(loss_f, 500)
+            mask = torch.zeros_like(loss_f)
+            mask[topk_indices] = 1
+            # Apply the mask to losses to keep only the selected ones
+            masked_loss = (loss_f * mask).sum() / mask.sum()  # Mean of selected losses
+        loss = masked_loss
     if loss_type == 'CE':
-        loss = nn.CrossEntropyLoss()(pred, target.long())
+        loss = nn.CrossEntropyLoss()(pred, target[:].long())
+    if loss_type == 'FL':
+        #loss = FocalLoss()(pred, target)
+        loss = BinaryFocalLoss(gamma=2)(pred, target)
     if loss_type == 'mse':
-        loss = nn.MSELoss()(pred, target)
+        loss = nn.MSELoss()(pred.squeeze(1), target)
     if loss_type == 'rmse':
         mse = nn.MSELoss()(pred, target)
         loss = torch.sqrt(mse)
@@ -332,13 +405,9 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
     if loss_type == 'dice':
         loss = DiceLoss()(pred, target)
     if loss_type == 'dice_bce':
-        #loss = DiceLoss()(pred, target) + nn.BCEWithLogitsLoss()(pred, target)
-
         loss_bce = nn.BCEWithLogitsLoss()(pred.squeeze(1), target)
         loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        
         loss = 0.5 * loss_bce + 0.5 * loss_dice
-        
     if loss_type == 'dice_bce_mc':
         #Method1
         # loss = DiceLoss(multiclass=True)(pred, target) + \
@@ -366,4 +435,6 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         loss = HausdorffERLoss()(pred, target, debug=False)
     if loss_type == "ActiveContourLoss":
         loss = ActiveContourLoss()(pred, target)
+    if loss_type == "Tversky":
+        loss = FocalTverskyLoss(alpha=0.4, beta=0.6)(pred, target) 
     return loss

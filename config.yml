@@ -1,32 +1,32 @@
 model_config:
   model: UNet1 #the directory to which the results are saved
-  initial_filter_size: [64]
+  initial_filter_size: [32]
   kernel: [3]
   drop_out_rate: [0.2]
-  input_size: [240, 240]    #[1536, 1536] #h, w 
+  input_size: [512, 512]    #[1536, 1536] #h, w 
   channel: 1
-  num_class: 4
-  model_type: 'TransUnet' #multi_task, attention, fourier1, fourier1_2, single, TransUnet
+  num_class: 1
+  model_type: 'single' #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, multi_task_reg, multi_task_regTU
   dropout: False
-  anydepth: False
+  anydepth: True
 train_config:
-  loss: dice_bce_mc
-  accuracy: dice_bce_mc
-  optimizer: SGD #SGD
-  lr_rate: [0.01]
+  loss: TopK
+  accuracy: TopK
+  optimizer: Adam #SGD
+  lr_rate: [0.0001]
   weight_decay: [0.0001]
-  batch_size: [1]
+  batch_size: [4]
   epochs: 10
   early_stop: 20
   num_workers: 20
-  seed: [7,35]
+  seed: [99]
   use_cuda: True
 dataset_config:
-  train_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val/']
-  val_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val/']
-  test_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/val/']
-  augmentation: False
-  save_dir: onurdeneme
+  train_path: ['/home/ocaki13/projects/liver/liver_dataset_processed/train/']
+  val_path: ['/home/ocaki13/projects/liver/liver_dataset_processed/val/']
+  test_path: ['/home/ocaki13/projects/liver/liver_dataset_processed/test/']
+  augmentation: True
+  save_dir: liverTopK2
   class_names: ['background','liver']
 resume:
   flag: False
