@@ -4,30 +4,31 @@ model_config:
   kernel: [3]
   drop_out_rate: [0.2]
   input_size: [768, 768]    #[1536, 1536] #h, w 
-  channel: -2
-  num_class: 3
-  model_type: 'TransUnet' #multi_task, attention, fourier1, fourier1_2, single
+  channel: 3
+  num_class: 1
+  model_type: multi_task_regTU #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
   dropout: False
   anydepth: False
 train_config:
-  loss: dice_bce_mc
-  accuracy: dice_bce_mc
-  optimizer: SGD
-  lr_rate: [0.01]
-  weight_decay: [0]
-  batch_size: [4]
+  loss: multi_task_loss
+  accuracy: mse
+  optimizer: Adam #SGD
+  lr_rate: [0.0005]
+  adaptive_lr: False
+  weight_decay: [0.0001]
+  batch_size: [2]
   epochs: 200
-  early_stop: 20
+  early_stop: 30
   num_workers: 20
-  seed: 35
+  seed:  [11, 17, 1888]
   use_cuda: True
 dataset_config:
-  train_path: ['/kuacc/users/ocaki13/hpc_run/serousV1/fold2/train']
-  val_path: ['/kuacc/users/ocaki13/hpc_run/serousV1/fold2/val']
-  test_path: ['/kuacc/users/ocaki13/hpc_run/serousV1/fold2/test']
-  aug_rate: [0]
-  save_dir: seroz_2cls_TransUnet_exp3_macenko_fold2
-  class_names: ['background','liver']
+  train_path: ['/kuacc/users/ocaki13/hpc_run/datasetv2_768_reg/fold1/train/']
+  val_path: ['/kuacc/users/ocaki13/hpc_run/datasetv2_768_reg/fold1/val/']
+  test_path: ['/kuacc/users/ocaki13/hpc_run/datasetv2_768_reg/fold1/test/']
+  augmentation: True
+  save_dir: seros_exp4_64TransUNet_reg_wonorm_UC_fold1
+  class_names: ['background','other cell','immune cell']
 resume:
   flag: False
   path: hd_exp1_123_bs/models/last_epoch.pt
