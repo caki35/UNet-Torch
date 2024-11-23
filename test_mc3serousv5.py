@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 import re
 import torch
-from Model import UNet, UNet_attention,UNet_BS
+from Model import UNet, UNet_attention
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from skimage.measure import label

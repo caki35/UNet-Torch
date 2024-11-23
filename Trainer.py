@@ -296,11 +296,11 @@ class Trainer():
 
                 batch_step = 0
                 with tqdm(self.dataloader[phase], unit="batch") as tbar:
-                    for inputs, label_mask in tbar:
+                    for inputs, labels in tbar:
                         tbar.set_description(f"Epoch {epoch}")
                         batch_step += 1
                         inputs = inputs.to(self.device).type(self.dtype)
-                        label_mask = label_mask.to(
+                        labels = labels.to(
                             self.device).type(self.dtype)
 
                         # forward
@@ -310,7 +310,7 @@ class Trainer():
                             output_mask = self.model(inputs)
                             if self.model_type in ['regression', 'regression_t']:
                                 output_mask = F.relu(output_mask)
-                            loss = calc_loss(output_mask, label_mask,
+                            loss = calc_loss(output_mask, labels,
                                              loss_type=self.loss_function)
 
                             reserved = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'
@@ -334,7 +334,7 @@ class Trainer():
 
                             else:
                                 epoch_loss += loss.item()
-                                val_score += calc_loss(output_mask, label_mask,
+                                val_score += calc_loss(output_mask, labels,
                                                        loss_type=self.accuracy_metric)
                                 tbar.set_postfix(loss=epoch_loss/batch_step,
                                                  accuracy=(val_score.item()/(batch_step)), memory=mem)

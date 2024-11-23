@@ -3,7 +3,7 @@ model_config:
   initial_filter_size: [64]
   kernel: [3]
   drop_out_rate: [0.2]
-  input_size: [800, 800]    #[1536, 1536] #h, w 
+  input_size: [400, 400]    #[1536, 1536] #h, w 
   channel: 1
   num_class: 4
   model_type: 'TransUnet' #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
@@ -27,7 +27,7 @@ dataset_config:
   val_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1//val/']
   test_path: ['/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1//test/']
   augmentation: True
-  save_dir: liverTopK2
+  save_dir: usDeneme
   class_names: ['background','Optic Nerve','Retina + Choroid','Sclera']
 resume:
   flag: False

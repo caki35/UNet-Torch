@@ -3,7 +3,7 @@ from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg, Data_Reg_MT
 import loss
 from torchvision.utils import make_grid, save_image
 import random
-from Model import UNet, UNet_multitask, UNet_attention, UNet_fourier1, UNet_fourier1_2, UNet_BS
+from Model import UNet, UNet_multitask, UNet_attention
 from collections import defaultdict
 from torch import optim
 import torch.nn as nn
@@ -308,8 +308,8 @@ def main(cfg):
         if test_image_list:
             print('Testing best model:')
             if model_type in ['attention', 'single', 'TransUnet']:
-                #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
-                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                #currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
             elif model_type in ['multi_task_regTU','multi_task_reg', 'fourier1']:
                 currResultsDict = test_multiple_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
             else:
