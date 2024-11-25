@@ -12,8 +12,42 @@ from torchvision import transforms
 from scipy import ndimage
 from scipy.ndimage.interpolation import zoom
 import staintools
+from imgaug.augmentables.segmaps import SegmentationMapsOnImage
+#np.bool = bool
+import imgaug.augmenters as iaa
+import torchio as tio
 
 image_ext = ['.jpg', '.jpeg', '.webp', '.bmp', '.png', '.tif', '.PNG', '.tiff']
+
+
+def RadiologyAugmentationAug(sample, aug):
+    image, label = sample['image'], sample['label']
+    
+    # Wrap the segmentation map
+    segmap = SegmentationMapsOnImage(label, shape=image.shape)
+    image_aug, segmap_aug = aug(images=image, segmentation_maps=segmap)
+    segmap_aug = segmap_aug.get_arr()
+    
+    sample = {'image': image_aug, 'label': segmap_aug}
+    return sample
+
+
+def RadiologyAugmentationTIO(sample, transforms_dict):
+    image, label = sample['image'], sample['label']
+    
+    subject = tio.Subject(
+        image=tio.ScalarImage(tensor=np.expand_dims(image,(0,-1))),  # Add channel and batch dim
+        label=tio.LabelMap(tensor=np.expand_dims(label,(0,-1))) # Add channel and batch dim
+    )  
+    # Apply augmentations
+    transform = tio.OneOf(transforms_dict)
+    transformed_subject = transform(subject)
+    
+    transformed_image = transformed_subject["image"].data.numpy()[0,:,:,0]
+    transformed_label = transformed_subject["label"].data.numpy()[0,:,:,0]
+    sample = {'image': transformed_image, 'label': transformed_label}
+    return sample
+
 
 
 def random_rot_flip(sample_list):
@@ -385,6 +419,33 @@ class Data_Binary(Dataset):
         self.channel = ch
         self.anydepth = anydepth
         self.augmentation = augmentation
+        #self.Counter = 0
+        if self.augmentation:
+            # Define augmentation pipeline IMGAUG.
+            self.aug = iaa.Sequential(iaa.SomeOf((0,2),[
+                iaa.Affine(rotate=(-30, 30)),
+                iaa.Affine(scale=(0.8, 1.2)),
+                iaa.TranslateX(px=(-40, +40)),
+                iaa.TranslateY(px=(-40, +40)),
+                iaa.GammaContrast((0.7, 1.3)),
+                iaa.imgcorruptlike.SpeckleNoise(severity=1),
+                iaa.imgcorruptlike.MotionBlur(severity=1),
+                iaa.AdditiveGaussianNoise(scale=(0, 0.2*255)),
+                iaa.imgcorruptlike.JpegCompression(severity=1),
+                iaa.AveragePooling([1,2])
+            ]))
+
+            # Define augmentation pipeline IMGAUG.
+            self.transforms_dict = {
+                tio.transforms.RandomAffine(scales=(0.9, 1.2), degrees=40): 0.1,
+                tio.transforms.RandomElasticDeformation(num_control_points=7, locked_borders=2): 0.1,
+                tio.transforms.RandomAnisotropy(axes=(1, 2), downsampling=(2, 4)): 0.1,
+                tio.transforms.RandomBlur(): 0.1,
+                tio.transforms.RandomGhosting(): 0.1,
+                tio.transforms.RandomSpike(num_spikes = 1, intensity= (1, 2)): 0.1,
+                tio.transforms.RandomBiasField(coefficients = 0.2, order= 3): 0.1,
+                tio.RandomGamma(log_gamma=0.1): 0.1,
+            }
         self.height = input_size[0]
         self.width = input_size[1]
         # self.transform = transforms.Compose(
@@ -402,15 +463,15 @@ class Data_Binary(Dataset):
         
     def transform(self, sample):
         image, label = sample['image'], sample['label']
-
+        #self.Counter +=1
         if self.augmentation:
-            sample_list = [image, label]
             if random.random() > 0.5:
-                sample_list = random_rot_flip(sample_list)
+                sample = RadiologyAugmentationTIO(sample, self.transforms_dict)
             elif random.random() > 0.5:
-                sample_list = random_rotate(sample_list)
-            image, label = sample_list
-        
+                sample = RadiologyAugmentationAug(sample, self.aug)
+            image, label = sample['image'], sample['label']
+            # cv2.imwrite(os.path.join('deneme/',str(self.Counter)+'.png'),image)
+            # cv2.imwrite(os.path.join('deneme/',str(self.Counter)+'_label.png'),label)
         if len(image.shape)==2:
             y, x = image.shape
             if x != self.width or y != self.height:
