@@ -178,7 +178,7 @@ def main(cfg):
             train_dataset = Data_Binary(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Binary(
-                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_path, ch, anydepth, False, input_size=input_size)
 
             model = UNet(ch, num_class, initial_filter_size,
                         use_cuda, dropout, dropout_p)
@@ -187,7 +187,7 @@ def main(cfg):
             train_dataset = Data_Reg(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Reg(
-                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_path, ch, anydepth, False, input_size=input_size)
             model = UNet(ch, num_class, initial_filter_size,
                         use_cuda, dropout, dropout_p)
             
@@ -195,7 +195,7 @@ def main(cfg):
             train_dataset = Data_Reg(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Reg(
-                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_path, ch, anydepth, False, input_size=input_size)
 
             config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
             config_vit.n_classes = cfg['model_config']['num_class']
@@ -209,7 +209,7 @@ def main(cfg):
             train_dataset = Data_Binary(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Binary(
-                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_path, ch, anydepth, False, input_size=input_size)
             
             config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
             config_vit.n_classes = cfg['model_config']['num_class']
@@ -229,14 +229,14 @@ def main(cfg):
             train_dataset = Data_Reg_MT(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Reg_MT(
-                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_path, ch, anydepth, False, input_size=input_size)
             model = UNet_multitask(ch, num_class, initial_filter_size, use_cuda)
         
         elif model_type == 'multi_task_regTU':
             train_dataset = Data_Reg_MT(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Reg_MT(
-                val_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_path, ch, anydepth, False, input_size=input_size)
             
             config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
             config_vit.n_classes = cfg['model_config']['num_class']
@@ -247,11 +247,9 @@ def main(cfg):
                                     
         elif model_type == 'attention':
             train_dataset = Data_Binary(
-                train_path, ch, anydepth, input_size=input_size)
+                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Binary(
-                val_path, ch, anydepth, input_size=input_size)
-            model = UNet_attention(ch, num_class, initial_filter_size,
-                        use_cuda, dropout, dropout_p)
+                val_path, ch, anydepth, False, input_size=input_size)
         else:
             raise ValueError('Invalid model_type "%s"' % model_type)
 

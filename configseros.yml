@@ -3,31 +3,31 @@ model_config:
   initial_filter_size: [64]
   kernel: [3]
   drop_out_rate: [0.2]
-  input_size: [768, 768]    #[1536, 1536] #h, w 
+  input_size: [384, 384]    #[1536, 1536] #h, w 
   channel: 3
   num_class: 1
-  model_type: multi_task_regTU #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
+  model_type: multi_task_reg #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
   dropout: False
   anydepth: False
 train_config:
-  loss: multi_task_loss
+  loss: mse
   accuracy: mse
   optimizer: Adam #SGD
   lr_rate: [0.0005]
   adaptive_lr: False
   weight_decay: [0.0001]
-  batch_size: [2]
-  epochs: 200
+  batch_size: [1]
+  epochs: 15
   early_stop: 30
   num_workers: 20
-  seed:  [11, 17, 1888]
+  seed:  [11, 17, 35]
   use_cuda: True
 dataset_config:
-  train_path: ['/kuacc/users/ocaki13/hpc_run/datasetv2_768_reg/fold1/train/']
-  val_path: ['/kuacc/users/ocaki13/hpc_run/datasetv2_768_reg/fold1/val/']
-  test_path: ['/kuacc/users/ocaki13/hpc_run/datasetv2_768_reg/fold1/test/']
-  augmentation: True
-  save_dir: seros_exp4_64TransUNet_reg_wonorm_UC_fold1
+  train_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/train/']
+  val_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/val/']
+  test_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/test/']
+  augmentation: False
+  save_dir: seros_deneme
   class_names: ['background','other cell','immune cell']
 resume:
   flag: False

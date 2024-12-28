@@ -13,23 +13,60 @@ from scipy import ndimage
 from scipy.ndimage.interpolation import zoom
 import staintools
 from imgaug.augmentables.segmaps import SegmentationMapsOnImage
-#np.bool = bool
+from imgaug.augmentables.heatmaps import HeatmapsOnImage
+np.bool = bool
 import imgaug.augmenters as iaa
 import torchio as tio
-
+from PIL import Image
+import matplotlib.pyplot as plt
 image_ext = ['.jpg', '.jpeg', '.webp', '.bmp', '.png', '.tif', '.PNG', '.tiff']
 
 
-def RadiologyAugmentationAug(sample, aug):
+
+def PathologyAugmentationAug(sample, aug):
     image, label = sample['image'], sample['label']
     
     # Wrap the segmentation map
     segmap = SegmentationMapsOnImage(label, shape=image.shape)
-    image_aug, segmap_aug = aug(images=image, segmentation_maps=segmap)
-    segmap_aug = segmap_aug.get_arr()
+    image_aug, segmap_aug = aug(images=[image], segmentation_maps=[segmap])
     
-    sample = {'image': image_aug, 'label': segmap_aug}
-    return sample
+    return {'image': image_aug[0], 'label': segmap_aug[0].get_arr()}
+
+def PathologyAugmentationAugHM(sample, aug):
+    image = sample['image']
+    label1, label2 = sample['label']
+
+    # Wrap the heatmap(s)
+    heatmaps_obj = HeatmapsOnImage(np.stack((label1, label2),axis=-1), shape=image.shape)
+    
+    # Apply the augmentation
+    image_aug, heatmaps_aug = aug(images=[image], heatmaps=[heatmaps_obj])
+    
+    # Extract the augmented image and heatmap(s)
+    return {'image': image_aug[0], 'label': [heatmaps_aug[0].get_arr()[:,:,0], heatmaps_aug[0].get_arr()[:,:,1]]}
+    
+    
+    
+# MASK_AUGMENTERS = ["Sequential", "SomeOf", "OneOf", "Sometimes",
+#                     "Fliplr", "Flipud", "CropAndPad",
+#                     "Affine", "PiecewiseAffine"]
+
+# def hook(images, augmenter, parents, default):
+    
+#     """Determines which augmenters to apply to masks."""
+#     return augmenter.__class__.__name__ in MASK_AUGMENTERS
+
+# def PathologyAugmentationAug(sample, aug):
+#     det = aug.to_deterministic()    
+#     augmentedSample = {}
+#     for currentSample in sample:
+#         if 'label' in currentSample: 
+#             augmentedSample[currentSample] = det.augment_image(sample[currentSample],
+#                                  hooks=imgaug.HooksImages(activator=hook))
+#             augmentedSample[currentSample][augmentedSample[currentSample]==255] = 0
+#         else:
+#             augmentedSample[currentSample] = det.augment_image(sample[currentSample])
+#     return augmentedSample
 
 
 def RadiologyAugmentationTIO(sample, transforms_dict):
@@ -313,18 +350,93 @@ class Data_Reg_MT(Dataset):
 
             self.NORMALIZER = staintools.StainNormalizer(method='macenko')
             self.NORMALIZER.fit(REF)
-        
+            
+        if self.augmentation:
+            # Define augmentation pipeline IMGAUG.
+            self.aug = iaa.Sequential(iaa.SomeOf((0,2),[
+                iaa.Affine(rotate=(-40, 40), mode="constant",cval=255),
+                iaa.Affine(translate_px={"x": (-40, 40), "y": (-40, 40)}, mode="constant",cval=255),
+                iaa.Fliplr(),
+                iaa.Flipud(),
+                iaa.OneOf([iaa.Affine(rotate=90),
+                iaa.Affine(rotate=180),
+                iaa.Affine(rotate=270)]),
+                iaa.OneOf([iaa.GaussianBlur(sigma=(0.1, 0.25)),
+                iaa.MedianBlur(k=(3)),
+                iaa.Sharpen(alpha=(0.0, 0.3), lightness=(0.8, 1.2))])
+            ]))
+
+            # Define augmentation pipeline IMGAUG.
+            self.transforms_dict = {
+                tio.transforms.RandomAffine(scales=(0.9, 1.2), degrees=40): 0.1,
+                tio.transforms.RandomElasticDeformation(num_control_points=7, locked_borders=2): 0.1,
+                tio.transforms.RandomAnisotropy(axes=(1, 2), downsampling=(2, 4)): 0.1,
+                tio.transforms.RandomBlur(): 0.1,
+                tio.transforms.RandomGhosting(): 0.1,
+                tio.transforms.RandomSpike(num_spikes = 1, intensity= (1, 2)): 0.1,
+                tio.transforms.RandomBiasField(coefficients = 0.2, order= 3): 0.1,
+                tio.RandomGamma(log_gamma=0.1): 0.1,
+            }
+            self._colorJitter = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.01)
+
+        self.Counter = 0
     def transform(self, sample):
         label1, label2 = sample['label']
         image = sample['image'] 
 
         if self.augmentation:
-            sample_list = [image, label1, label2]
-            if random.random() > 0.5:
-                sample_list = random_rot_flip(sample_list)
-            elif random.random() > 0.5:
-                sample_list = random_rotate(sample_list)
-            image, label1, label2 = sample_list
+            if random.random() > 0.25:
+                
+                image_org = sample['image'] 
+                label1_org, label2_org =  sample['label']
+                sample = PathologyAugmentationAugHM(sample, self.aug)
+                image = sample['image'] 
+                image = np.array(self._colorJitter(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))))
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                label1, label2 = sample['label']
+
+                # ##### DEBUG ######            
+                # # Create a vertical line as a separator
+                # self.Counter += 1
+                # separator_width = 10
+                # separator = np.zeros((image.shape[0], separator_width, 3), dtype=np.uint8) 
+
+                # # Concatenate the images with the separator
+                # concatenated_image = np.hstack((image_org, separator, image))
+
+                # # Save the concatenated image
+                # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug.png'),concatenated_image)
+
+                # fig, axs = plt.subplots(2, 2)
+                # fig.set_figheight(20)
+                # fig.set_figwidth(20)
+
+                # axs[0,0].imshow(label1_org)
+                # axs[0,0].title.set_text('original other')
+                # fig.text(0.25, 0.5, "count: {}".format(np.sum(label1_org)), ha='center', fontsize=16)
+
+                # axs[0,1].imshow(label1)
+                # axs[0,1].title.set_text('augmented other')
+                # fig.text(0.75, 0.5, "count: {}".format(np.sum(label1)), ha='center', fontsize = 16)
+                
+                # axs[1,0].imshow(label2_org)
+                # axs[1,0].title.set_text('original immune')
+                # fig.text(0.25, 0.08, "count: {}".format(np.sum(label2_org)), ha='center', fontsize = 16)
+
+                # axs[1,1].imshow(label2)
+                # axs[1,1].title.set_text('augmented immune')
+                # fig.text(0.75, 0.08, "count: {}".format(np.sum(label2)), ha='center', fontsize = 16)
+                
+                # fig.savefig(os.path.join('augload/','imgaug'+str(self.Counter)+'aug_label.png'))
+                # fig.clf()
+                # plt.close(fig)  
+                
+            # sample_list = [image, label1, label2]
+            # if random.random() > 0.5:
+            #     sample_list = random_rot_flip(sample_list)
+            # elif random.random() > 0.5:
+            #     sample_list = random_rotate(sample_list)
+            # image, label1, label2 = sample_list
         
         if len(image.shape)==2:
             y, x = image.shape
@@ -378,8 +490,8 @@ class Data_Reg_MT(Dataset):
 
         label_path_immune =  img_path[:img_path.rfind('.')] + '_label_immune_reg.npy'
         label_path_other =  img_path[:img_path.rfind('.')] + '_label_other_reg.npy'
-        label_immune = np.load(label_path_immune)
-        label_other = np.load(label_path_other)
+        label_immune = np.load(label_path_immune).astype(np.float32)
+        label_other = np.load(label_path_other).astype(np.float32)
        
         # print(np.sum(label))
         # print(label)
@@ -419,20 +531,20 @@ class Data_Binary(Dataset):
         self.channel = ch
         self.anydepth = anydepth
         self.augmentation = augmentation
-        #self.Counter = 0
+        self.Counter = 0
         if self.augmentation:
             # Define augmentation pipeline IMGAUG.
             self.aug = iaa.Sequential(iaa.SomeOf((0,2),[
-                iaa.Affine(rotate=(-30, 30)),
-                iaa.Affine(scale=(0.8, 1.2)),
-                iaa.TranslateX(px=(-40, +40)),
-                iaa.TranslateY(px=(-40, +40)),
-                iaa.GammaContrast((0.7, 1.3)),
-                iaa.imgcorruptlike.SpeckleNoise(severity=1),
-                iaa.imgcorruptlike.MotionBlur(severity=1),
-                iaa.AdditiveGaussianNoise(scale=(0, 0.2*255)),
-                iaa.imgcorruptlike.JpegCompression(severity=1),
-                iaa.AveragePooling([1,2])
+                iaa.Affine(rotate=(-40, 40), mode="constant",cval=255),
+                iaa.Affine(translate_px={"x": (-40, 40), "y": (-40, 40)}, mode="constant",cval=255),
+                iaa.Fliplr(),
+                iaa.Flipud(),
+                iaa.OneOf([iaa.Affine(rotate=90),
+                iaa.Affine(rotate=180),
+                iaa.Affine(rotate=270)]),
+                iaa.OneOf([iaa.GaussianBlur(sigma=(0.1, 0.25)),
+                iaa.MedianBlur(k=(3)),
+                iaa.Sharpen(alpha=(0.0, 0.3), lightness=(0.8, 1.2))])
             ]))
 
             # Define augmentation pipeline IMGAUG.
@@ -446,6 +558,8 @@ class Data_Binary(Dataset):
                 tio.transforms.RandomBiasField(coefficients = 0.2, order= 3): 0.1,
                 tio.RandomGamma(log_gamma=0.1): 0.1,
             }
+            self._colorJitter = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.01)
+
         self.height = input_size[0]
         self.width = input_size[1]
         # self.transform = transforms.Compose(
@@ -463,15 +577,39 @@ class Data_Binary(Dataset):
         
     def transform(self, sample):
         image, label = sample['image'], sample['label']
-        #self.Counter +=1
+        self.Counter +=1
         if self.augmentation:
-            if random.random() > 0.5:
-                sample = RadiologyAugmentationTIO(sample, self.transforms_dict)
-            elif random.random() > 0.5:
-                sample = RadiologyAugmentationAug(sample, self.aug)
-            image, label = sample['image'], sample['label']
-            # cv2.imwrite(os.path.join('deneme/',str(self.Counter)+'.png'),image)
-            # cv2.imwrite(os.path.join('deneme/',str(self.Counter)+'_label.png'),label)
+            # if random.random() > 0.5:
+            #     sample = RadiologyAugmentationTIO(sample, self.transforms_dict)
+            #     image, label = sample['image'], sample['label']
+            #     cv2.imwrite(os.path.join('deneme/','torchio'+str(self.Counter)+'.png'),image)
+            #     cv2.imwrite(os.path.join('deneme/','torchio'+str(self.Counter)+'_label.png'),label)
+                
+                
+            if random.random() > 0.25:
+                
+                #image_org, label_org = sample['image'], sample['label']
+                            
+                sample = PathologyAugmentationAug(sample, self.aug)
+                image, label = sample['image'], sample['label']
+                image = np.array(self._colorJitter(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))))
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+                # ##### DEBUG ######            
+                # # Create a vertical line as a separator
+                # separator_width = 10
+                # separator = np.zeros((image.shape[0], separator_width, 3), dtype=np.uint8) 
+
+                # # Concatenate the images with the separator
+                # concatenated_image = np.hstack((image_org, separator, image))
+                # separator = np.zeros((image.shape[0], separator_width), dtype=np.uint8) 
+                # concatenated_label = np.hstack((label_org, separator, label))
+
+                # # Save the concatenated image
+                # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug.png'),concatenated_image)
+                # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug_label.png'),concatenated_label)
+
+
         if len(image.shape)==2:
             y, x = image.shape
             if x != self.width or y != self.height:
@@ -496,7 +634,6 @@ class Data_Binary(Dataset):
 
         #image = self.normalizeTorch(image.astype(np.float32))
         label = torch.from_numpy(label.astype(np.float32))
-        
         sample = {'image': image, 'label': label.long()}
         return sample
     
@@ -518,9 +655,8 @@ class Data_Binary(Dataset):
             im_rgb = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
             image = self.NORMALIZER.transform(im_rgb)
 
-        label_path =  img_path[:img_path.rfind('.')] + '_label.png'
+        label_path =  img_path[:img_path.rfind('.')] + '_label_mc.png'
         label = cv2.imread(label_path, 0)
-
         sample = {'image': image, 'label': label}
         sample = self.transform(sample)
 

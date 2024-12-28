@@ -100,7 +100,7 @@ class Trainer():
         elif self.model_type in ['multi_task', 'multi_task_reg', 'multi_task_regTU']:
             if self.loss_function == 'multi_task_loss':
                 self.multi_task_uc_train()
-            elif self.loss_function == 'multi_task_loss':
+            elif self.loss_function == 'multi_task_loss_ratio':
                 self.multi_task_trainRatio()
             else:
                 self.multi_task_train()
