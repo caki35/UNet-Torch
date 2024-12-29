@@ -19,6 +19,7 @@ from scipy.ndimage.interpolation import zoom
 from scipy.spatial import distance
 import seaborn as sns
 import staintools
+from scipy.stats import pearsonr
 
 image_ext = ['.png', '.jpg', '.tif', '.tiff']
 
@@ -625,6 +626,10 @@ class Results2Class:
         perf_dt = pd.DataFrame(performace_results)
         perf_dt.to_csv(os.path.join(self.save_dir,'resultsData.csv'), index=False)
         
+        pearson_r_cell, _ = pearsonr(self.cellCounts['GT'], self.cellCounts['Pred'])        
+        pearson_r_immune, _ = pearsonr(self.immuneCounts['GT'], self.immuneCounts['Pred'])
+        pearson_r_ratio, _ = pearsonr(self.ratio['GT'], self.ratio['Pred'])
+        
         gt_list_immune = self.immuneCounts['GT']
         pred_list_immune = self.immuneCounts['Pred']
         
@@ -708,40 +713,47 @@ class Results2Class:
                               'Cell Precesion': classPrecision[0]*100, 
                               'Cell Recall': classRecall[0]*100,
                               'Cell F1': classF1[0]*100,
-                            'Cell Absolute Difference': round(sum( self.cellCounts['AbsDiff'])/len( self.cellCounts['AbsDiff']),4),
-                              'Cell Accuracy': round(sum(filteredCellAccuracy)/len(filteredCellAccuracy),4),
-                            'Cell Accuracy RD': round(sum( self.cellCounts['AccuracyRelative'])/len( self.cellCounts['AccuracyRelative']),4),
-                            'Cell Accuracy RPD': round(sum( self.cellCounts['AccuracyRelativePD'])/len( self.cellCounts['AccuracyRelativePD']),4),
+                            'Cell MAE': round(sum( self.cellCounts['AbsDiff'])/len( self.cellCounts['AbsDiff']),4),
+                              'Cell MRE': round(sum(filteredCellAccuracy)/len(filteredCellAccuracy),4),
+                            'Cell MRE max': round(sum( self.cellCounts['AccuracyRelative'])/len( self.cellCounts['AccuracyRelative']),4),
+                            'Cell RPD': round(sum( self.cellCounts['AccuracyRelativePD'])/len( self.cellCounts['AccuracyRelativePD']),4),
+                            'Cell Pearson r': pearson_r_cell,
 
                               'Immune Precesion': classPrecision[1]*100,
                               'Immune Recall': classRecall[1]*100,
                               'Immune F1': classF1[1]*100,
-                            'Immune Absolute Difference': round(sum( self.immuneCounts['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
-                              'Immune Accuracy': round(sum(filteredImmuneAccuracy)/len(filteredImmuneAccuracy),4),
-                            'Immune Accuracy RD': round(sum( self.immuneCounts['AccuracyRelative'])/len( self.immuneCounts['AccuracyRelative']),4),
-                            'Immune Accuracy RPD': round(sum( self.immuneCounts['AccuracyRelativePD'])/len( self.immuneCounts['AccuracyRelativePD']),4),
-                            
-                                'Ratio Absolute Difference': round(sum(self.ratio['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
-                              'Ratio Accuracy': round(sum(self.ratio['Accuracy'])/len(self.ratio['Accuracy']),4),
-                            'Ratio Accuracy RD': round(sum(self.ratio['AccuracyRelative'])/len(self.ratio['AccuracyRelative']),4),
-                            'Ratio Accuracy RPD': round(sum(self.ratio['AccuracyRelativePD'])/len(self.ratio['AccuracyRelativePD']),4)}
+                            'Immune MAE': round(sum( self.immuneCounts['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
+                              'Immune MRE': round(sum(filteredImmuneAccuracy)/len(filteredImmuneAccuracy),4),
+                            'Immune MRE max': round(sum( self.immuneCounts['AccuracyRelative'])/len( self.immuneCounts['AccuracyRelative']),4),
+                            'Immune RPD': round(sum( self.immuneCounts['AccuracyRelativePD'])/len( self.immuneCounts['AccuracyRelativePD']),4),
+                            'Immune Pearson r': pearson_r_immune,
+                                'Ratio MAE': round(sum(self.ratio['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
+                              'Ratio MRE': round(sum(self.ratio['Accuracy'])/len(self.ratio['Accuracy']),4),
+                            'Ratio Accuracy MRE max': round(sum(self.ratio['AccuracyRelative'])/len(self.ratio['AccuracyRelative']),4),
+                            'Ratio Accuracy RPD': round(sum(self.ratio['AccuracyRelativePD'])/len(self.ratio['AccuracyRelativePD']),4),
+                            'Ratio pearson r':pearson_r_ratio}
+        
         
         perf_dt2 = pd.DataFrame(self.performace_results, index=[0])
         perf_dt2.to_csv(os.path.join(self.save_dir,'results.csv'), index=False)
         
         self.performace_results = {
-                    'Cell Absolute Difference': round(sum( self.cellCounts['AbsDiff'])/len( self.cellCounts['AbsDiff']),4),
-                        'Cell Accuracy': round(sum(filteredCellAccuracy)/len(filteredCellAccuracy),4),
-                    'Cell Accuracy RD': round(sum( self.cellCounts['AccuracyRelative'])/len( self.cellCounts['AccuracyRelative']),4),
-                    'Cell Accuracy RPD': round(sum( self.cellCounts['AccuracyRelativePD'])/len( self.cellCounts['AccuracyRelativePD']),4),
-                    'Immune Absolute Difference': round(sum( self.immuneCounts['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
-                        'Immune Accuracy': round(sum(filteredImmuneAccuracy)/len(filteredImmuneAccuracy),4),
-                    'Immune Accuracy RD': round(sum( self.immuneCounts['AccuracyRelative'])/len( self.immuneCounts['AccuracyRelative']),4),
-                    'Immune Accuracy RPD': round(sum( self.immuneCounts['AccuracyRelativePD'])/len( self.immuneCounts['AccuracyRelativePD']),4),     
-                        'Ratio Absolute Difference': round(sum(self.ratio['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
-                        'Ratio Accuracy': round(sum(self.ratio['Accuracy'])/len(self.ratio['Accuracy']),4),
-                    'Ratio Accuracy RD': round(sum(self.ratio['AccuracyRelative'])/len(self.ratio['AccuracyRelative']),4),
-                    'Ratio Accuracy RPD': round(sum(self.ratio['AccuracyRelativePD'])/len(self.ratio['AccuracyRelativePD']),4)}
+                    'Cell MAE': round(sum( self.cellCounts['AbsDiff'])/len( self.cellCounts['AbsDiff']),4),
+                        'Cell MRE': round(sum(filteredCellAccuracy)/len(filteredCellAccuracy),4),
+                    'Cell MRE max': round(sum( self.cellCounts['AccuracyRelative'])/len( self.cellCounts['AccuracyRelative']),4),
+                    'Cell RPD': round(sum( self.cellCounts['AccuracyRelativePD'])/len( self.cellCounts['AccuracyRelativePD']),4),
+                    'Cell Pearson r': pearson_r_cell,
+                    'Immune MAE': round(sum( self.immuneCounts['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
+                        'Immune MRE': round(sum(filteredImmuneAccuracy)/len(filteredImmuneAccuracy),4),
+                    'Immune MRE max': round(sum( self.immuneCounts['AccuracyRelative'])/len( self.immuneCounts['AccuracyRelative']),4),
+                    'Immune RPD': round(sum( self.immuneCounts['AccuracyRelativePD'])/len( self.immuneCounts['AccuracyRelativePD']),4), 
+                    'Immune Pearson r': pearson_r_immune,    
+                        'Ratio MAE': round(sum(self.ratio['AbsDiff'])/len( self.immuneCounts['AbsDiff']),4),
+                        'Ratio MRE': round(sum(self.ratio['Accuracy'])/len(self.ratio['Accuracy']),4),
+                    'Ratio MRE max': round(sum(self.ratio['AccuracyRelative'])/len(self.ratio['AccuracyRelative']),4),
+                    'Ratio RPD': round(sum(self.ratio['AccuracyRelativePD'])/len(self.ratio['AccuracyRelativePD']),4),
+                    'Ratio pearson r':pearson_r_ratio
+                    }
         
         perf_dt2 = pd.DataFrame(self.performace_results, index=[0])
         perf_dt2.to_csv(os.path.join(self.save_dir,'resultsC.csv'), index=False)
@@ -822,17 +834,17 @@ class Results2Class:
         perf_dt_filtered.to_csv(os.path.join(self.save_dir,'resultsDataFiltred.csv'), index=False)
         
         performace_results_filtered = {
-                    'Cell Absolute Difference': round(sum(cellCountsFilteredAbsDiff)/len(cellCountsFilteredAbsDiff),4),
+                    'Cell MAE': round(sum(cellCountsFilteredAbsDiff)/len(cellCountsFilteredAbsDiff),4),
                         'Cell Accuracy': round(sum(cellCountsFilteredAccuracy)/len(cellCountsFilteredAccuracy),4),
                     'Cell Accuracy RD': round(sum(cellCountsFilteredRD)/len(cellCountsFilteredRD),4),
                     'Cell Accuracy RPD': round(sum(cellCountsFilteredRDP)/len(cellCountsFilteredRDP),4),
 
-                    'Immune Absolute Difference': round(sum(immuneCountsFilteredAbsDiff)/len(immuneCountsFilteredAbsDiff),4),
+                    'Immune MAE': round(sum(immuneCountsFilteredAbsDiff)/len(immuneCountsFilteredAbsDiff),4),
                         'Immune Accuracy': round(sum(immuneCountsFilteredAccuracy)/len(immuneCountsFilteredAccuracy),4),
                     'Immune Accuracy RD': round(sum(immuneCountsFilteredRD)/len(immuneCountsFilteredRD),4),
                     'Immune Accuracy RPD': round(sum(immuneCountsFilteredRDP)/len(immuneCountsFilteredRDP),4),
                     
-                        'Ratio Absolute Difference': round(sum(ratioFilteredAbsDiff)/len(ratioFilteredAbsDiff),4),
+                        'Ratio MAE': round(sum(ratioFilteredAbsDiff)/len(ratioFilteredAbsDiff),4),
                         'Ratio Accuracy': round(sum(ratioFilteredAccuracy)/len(ratioFilteredAccuracy),4),
                     'Ratio Accuracy RD': round(sum(ratioFilteredRD)/len(ratioFilteredRD),4),
                     'Ratio Accuracy RPD': round(sum(ratioFilteredRDP)/len(ratioFilteredRDP),4)}

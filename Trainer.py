@@ -212,6 +212,8 @@ class Trainer():
                         model_name = 'epoch{}.pt'.format(epoch)
                         torch.save(self.best_model, os.path.join(
                             self.save_dir_model, model_name))
+                        torch.save(self.best_model, os.path.join(
+                            self.save_dir_model, 'best.pt'))
                     else:
                         self.early_stop_counter += 1
                     if self.early_stop_counter > self.patience:
@@ -364,6 +366,8 @@ class Trainer():
                         model_name = 'epoch{}.pt'.format(epoch)
                         torch.save(self.best_model, os.path.join(
                             self.save_dir_model, model_name))
+                        torch.save(self.best_model, os.path.join(
+                            self.save_dir_model, 'best.pt'))
                     else:
                         self.early_stop_counter += 1
                     if self.early_stop_counter > self.patience:
@@ -525,6 +529,8 @@ class Trainer():
                         model_name = 'epoch{}.pt'.format(epoch)
                         torch.save(self.best_model, os.path.join(
                             self.save_dir_model, model_name))
+                        torch.save(self.best_model, os.path.join(
+                            self.save_dir_model, 'best.pt'))
                     else:
                         self.early_stop_counter += 1
                     if self.early_stop_counter > self.patience:
@@ -700,6 +706,8 @@ class Trainer():
                         model_name = 'epoch{}.pt'.format(epoch)
                         torch.save(self.best_model, os.path.join(
                             self.save_dir_model, model_name))
+                        torch.save(self.best_model, os.path.join(
+                            self.save_dir_model, 'best.pt'))
                     else:
                         self.early_stop_counter += 1
                     if self.early_stop_counter > self.patience:
@@ -889,6 +897,8 @@ class Trainer():
                         model_name = 'epoch{}.pt'.format(epoch)
                         torch.save(self.best_model, os.path.join(
                             self.save_dir_model, model_name))
+                        torch.save(self.best_model, os.path.join(
+                            self.save_dir_model, 'best.pt'))
                     else:
                         self.early_stop_counter += 1
                     if self.early_stop_counter > self.patience:

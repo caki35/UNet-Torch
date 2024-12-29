@@ -25,7 +25,7 @@ from test import test_single, get_image_list
 from test_mc3serousv5 import test_single_mc
 from test_reg3serousv5mt import test_multiple_reg
 import pandas as pd
-
+import glob
 def weights_init(m):
     if isinstance(m, nn.Conv2d):
         torch.nn.init.kaiming_uniform_(m.weight)
@@ -154,6 +154,7 @@ def main(cfg):
     train_path = cfg['dataset_config']['train_path']
     val_path = cfg['dataset_config']['val_path']
     test_path = cfg['dataset_config']['test_path']
+    deleteNonBestModels = True
     if test_path:
         test_image_list = get_image_list(test_path[0])
         resultsDict = {}
@@ -306,13 +307,22 @@ def main(cfg):
         if test_image_list:
             print('Testing best model:')
             if model_type in ['attention', 'single', 'TransUnet']:
-                currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
-                #currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
             elif model_type in ['multi_task_regTU','multi_task_reg', 'fourier1']:
                 currResultsDict = test_multiple_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
             else:
                 continue
             resultsDict[currentSeed] = currResultsDict
+            
+            if deleteNonBestModels:
+                folder_path = os.path.join(output_save_dir ,"models")
+                files_to_delete = glob.glob(os.path.join(folder_path, "*epoch*"))
+                for file_path in files_to_delete:
+                    try:
+                        os.remove(file_path)  # Delete the file
+                    except Exception as e:
+                        print(f"Error deleting {file_path}: {e}")
     
     df = pd.DataFrame(resultsDict)
     df = df.transpose()

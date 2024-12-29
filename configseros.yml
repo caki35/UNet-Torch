@@ -5,19 +5,19 @@ model_config:
   drop_out_rate: [0.2]
   input_size: [384, 384]    #[1536, 1536] #h, w 
   channel: 3
-  num_class: 1
-  model_type: multi_task_reg #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
+  num_class: 3
+  model_type: TransUnet #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
   dropout: False
   anydepth: False
 train_config:
-  loss: mse
-  accuracy: mse
+  loss: dice_bce_mc
+  accuracy: dice_bce_mc
   optimizer: Adam #SGD
   lr_rate: [0.0005]
   adaptive_lr: False
   weight_decay: [0.0001]
   batch_size: [1]
-  epochs: 15
+  epochs: 10
   early_stop: 30
   num_workers: 20
   seed:  [11, 17, 35]
@@ -26,8 +26,8 @@ dataset_config:
   train_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/train/']
   val_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/val/']
   test_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/test/']
-  augmentation: False
-  save_dir: seros_deneme
+  augmentation: True
+  save_dir: seros_deneme2
   class_names: ['background','other cell','immune cell']
 resume:
   flag: False
