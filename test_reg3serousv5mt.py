@@ -20,6 +20,7 @@ from scipy.ndimage.interpolation import zoom
 from scipy.spatial import distance
 import seaborn as sns
 import staintools
+from scipy.stats import pearsonr
 
 image_ext = ['.png', '.jpg', '.tif', '.tiff']
 
@@ -348,6 +349,11 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
 
     perf_dt = pd.DataFrame(performace_results)
     perf_dt.to_csv(os.path.join(save_dir,'resultsData.csv'), index=False)
+    
+    pearson_r_cell, _ = pearsonr(gt_list_other, pred_list_other)        
+    pearson_r_immune, _ = pearsonr(gt_list_immune, pred_list_immune)
+    pearson_r_ratio, _ = pearsonr(gt_list_ratio, pred_list_ratio)
+        
             
     filteredCellAccuracy = [min(num, 5) for num in accuracy_other]
     filteredImmuneAccuracy = [min(num, 5) for num in accuracy_immune]
@@ -356,20 +362,23 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
     filteredImmuneAccuracy_mean = round(sum(filteredImmuneAccuracy)/len(filteredImmuneAccuracy),4)
 
     performace_results_mean = {
-                'Cell Absolute Difference': [round(sum(Absdiff_list_other)/len(Absdiff_list_other),4)],
-                    'Cell Accuracy': [filteredCellAccuracy_mean],
-                'Cell Accuracy RD': [round(sum(AccuracyRelative_other)/len(AccuracyRelative_other),4)],
-                'Cell Accuracy RPD': [round(sum(AccuracyRelativePD_other)/len(AccuracyRelativePD_other),4)],
+                'Cell MAE': [round(sum(Absdiff_list_other)/len(Absdiff_list_other),4)],
+                    'Cell MRE': [filteredCellAccuracy_mean],
+                'Cell MRE max': [round(sum(AccuracyRelative_other)/len(AccuracyRelative_other),4)],
+                'Cell RPD': [round(sum(AccuracyRelativePD_other)/len(AccuracyRelativePD_other),4)],
+                'Cell Pearson r': [round(pearson_r_cell,4)],
                 
-                'Immune Absolute Difference': [round(sum(Absdiff_list_immune)/len(Absdiff_list_immune),4)],
-                    'Immune Accuracy': [filteredImmuneAccuracy_mean],
-                'Immune Accuracy RD': [round(sum(AccuracyRelative_immune)/len(AccuracyRelative_immune),4)],
-                'Immune Accuracy RPD': [round(sum(AccuracyRelativePD_immune)/len(AccuracyRelativePD_immune),4)],
-                     
-                    'Ratio Absolute Difference': [round(sum(Absdiff_list_ratio)/len(Absdiff_list_ratio),4)],
-                    'Ratio Accuracy': [round(sum(accuracy_ratio)/len(accuracy_ratio),4)],
-                'Ratio Accuracy RD': [round(sum(AccuracyRelative_ratio)/len(AccuracyRelative_ratio),4)],
-                'Ratio Accuracy RPD': [round(sum(AccuracyRelativePD_ratio)/len(AccuracyRelativePD_ratio),4)]}
+                'Immune MAE': [round(sum(Absdiff_list_immune)/len(Absdiff_list_immune),4)],
+                    'Immune MRE': [filteredImmuneAccuracy_mean],
+                'Immune MRE max': [round(sum(AccuracyRelative_immune)/len(AccuracyRelative_immune),4)],
+                'Immune RPD': [round(sum(AccuracyRelativePD_immune)/len(AccuracyRelativePD_immune),4)],
+                'Immune Pearson r': [round(pearson_r_immune,4)],    
+
+                    'Ratio MAE': [round(sum(Absdiff_list_ratio)/len(Absdiff_list_ratio),4)],
+                    'Ratio MRE': [round(sum(accuracy_ratio)/len(accuracy_ratio),4)],
+                'Ratio MRE max': [round(sum(AccuracyRelative_ratio)/len(AccuracyRelative_ratio),4)],
+                'Ratio RPD': [round(sum(AccuracyRelativePD_ratio)/len(AccuracyRelativePD_ratio),4)],
+                                    'Ratio pearson r':[round(pearson_r_ratio,4)]}
     
     perf_dt2 = pd.DataFrame(performace_results_mean)
     perf_dt2.to_csv(os.path.join(save_dir,'resultsDataMean.csv'), index=False)
