@@ -10,24 +10,25 @@ model_config:
   dropout: False
   anydepth: False
 train_config:
-  loss: dice_bce_mc
-  accuracy: dice_bce_mc
+  loss: MyTopoLoss1
+  accuracy: MyTopoLoss1
   optimizer: Adam #SGD
   lr_rate: [0.0005]
   adaptive_lr: False
   weight_decay: [0.0001]
   batch_size: [1]
-  epochs: 10
+  epochs: 15
   early_stop: 30
   num_workers: 20
-  seed:  [11, 17, 35]
+  seed:  [11, 17]
   use_cuda: True
 dataset_config:
-  train_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/train/']
-  val_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/val/']
-  test_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold1/test/']
+  train_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/train/']
+  val_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/val/']
+  test_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/test/']
+  dot_annotation_path: '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'
   augmentation: True
-  save_dir: seros_deneme2
+  save_dir: topoDeneme2
   class_names: ['background','other cell','immune cell']
 resume:
   flag: False

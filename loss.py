@@ -7,6 +7,9 @@ from scipy.ndimage.morphology import distance_transform_edt as edt
 import numpy as np
 import cv2
 from scipy.ndimage import convolve
+from topoloss_pytorch import getTopoLoss
+from topoCount import topoCountloss
+from myTopoLoss import PointCloudFiltration
 global CLASS_NUMBER
 
 class ActiveContourLoss(nn.Module):
@@ -369,6 +372,115 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         loss = nn.BCEWithLogitsLoss()(pred.squeeze(1), target)
     if loss_type == 'TopK':
         loss = TopKLoss()(pred, target)
+    if loss_type == 'MyTopoLoss1':
+        lamda_pers = 0.001
+        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
+        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
+        # Step 1: Apply softmax to convert logits into probabilities
+        # Softmax is applied along the class dimension (dim=1)
+        likelihood = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
+        out = torch.argmax(likelihood, dim=1).cpu().detach().numpy()
+        
+        # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
+        ground_truth_cells = (target == 1).cpu().numpy().astype(np.uint8)   # Convert cell mask (class 1) to binary
+        ground_truth_immune = (target == 2).cpu().numpy().astype(np.uint8) # Convert immune mask (class 2) to binary
+        
+        total_loss_pers = 0
+        for batch in range(out.shape[0]):
+            
+            # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
+            pred_cells = (out[batch] == 1).astype(np.uint8)  # Convert cell mask (class 1) to binary
+            pred_immune = (out[batch] == 2).astype(np.uint8)  # Convert immune mask (class 2) to binary
+            total_loss_pers += PointCloudFiltration(ground_truth_cells[batch], pred_cells, 'betti',p=2)
+            total_loss_pers += PointCloudFiltration(ground_truth_immune[batch], pred_immune, 'betti',p=2)
+        total_loss_pers /= out.shape[0]
+        total_loss_pers = torch.tensor(total_loss_pers, dtype=torch.float32, device=pred.device)
+
+        loss = (0.5 * loss_ce + 0.5 * loss_dice)*(1+(lamda_pers*total_loss_pers))
+        
+    if loss_type == 'TopoCount':
+        lamda_pers = 1
+        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
+        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
+        # Step 1: Apply softmax to convert logits into probabilities
+        # Softmax is applied along the class dimension (dim=1)
+        likelihood = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
+        
+        # Step 2: Extract the probabilities for the two classes of interest
+        # Class 1: Immune (index 1 in the channel dimension)
+        likelihood_cells  = likelihood[:, 1, :, :]  # Shape: (B, H, W)
+        
+        # Class 2: Cells (index 2 in the channel dimension)
+        likelihood_immune = likelihood[:, 2, :, :]  # Shape: (B, H, W)
+        
+        # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
+        ground_truth_cells = (target == 1).float()   # Convert cell mask (class 1) to binary
+        ground_truth_immune = (target == 2).float()  # Convert immune mask (class 2) to binary
+        
+        # Compute topological loss for immune and cell classes
+        topo_loss_cells = topoCountloss(likelihood_cells.unsqueeze(1), ground_truth_cells.unsqueeze(1))
+        topo_loss_immune = topoCountloss(likelihood_immune.unsqueeze(1), ground_truth_immune.unsqueeze(1))
+
+        loss = (loss_dice+loss_ce) +(lamda_pers * (topo_loss_immune+topo_loss_cells)) 
+    if loss_type == 'TopoCount2':
+        lamda_pers = 1
+        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
+        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
+        # Step 1: Apply softmax to convert logits into probabilities
+        # Softmax is applied along the class dimension (dim=1)
+        likelihoods = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
+        
+        
+        ground_truth_foreground = (target != 0).float()  
+        print(torch.unique(ground_truth_foreground))
+        likelihood_foreground = likelihoods[:, 1, :, :] + likelihoods[:, 2, :, :]  # Shape: (B, H, W), combined foreground class
+        
+        # Compute topological loss for immune and cell classes
+        topo_loss = topoCountloss(likelihood_foreground.unsqueeze(1), ground_truth_foreground.unsqueeze(1))
+
+        loss = (loss_dice+loss_ce) + lamda_pers * topo_loss 
+    if loss_type == 'TopoLoss':
+        lamda_pers = 0.0001
+        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
+        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
+        # Step 1: Apply softmax to convert logits into probabilities
+        # Softmax is applied along the class dimension (dim=1)
+        likelihood = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
+        
+        # Step 2: Extract the probabilities for the two classes of interest
+        # Class 1: Immune (index 1 in the channel dimension)
+        likelihood_cells  = likelihood[:, 1, :, :]  # Shape: (B, H, W)
+        
+        # Class 2: Cells (index 2 in the channel dimension)
+        likelihood_immune = likelihood[:, 2, :, :]  # Shape: (B, H, W)
+        
+        # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
+        ground_truth_cells = (target == 1).float()   # Convert cell mask (class 1) to binary
+        ground_truth_immune = (target == 2).float()  # Convert immune mask (class 2) to binary
+        # Compute topological loss for immune and cell classes
+        topo_loss_cells = getTopoLoss(likelihood_cells, ground_truth_cells)
+        topo_loss_immune = getTopoLoss(likelihood_immune, ground_truth_immune)
+
+        loss = (loss_dice+loss_ce) +(lamda_pers * (topo_loss_immune+topo_loss_cells)) 
+
+    if loss_type == 'TopoLoss2':
+        lamda_pers = 0.00005
+        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
+        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
+        # Step 1: Apply softmax to convert logits into probabilities
+        # Softmax is applied along the class dimension (dim=1)
+        likelihoods = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
+        
+        # Ground-truth for foreground vs background
+        ground_truth_foreground = (target != 0).float()  
+        # Ground-truth for foreground vs background
+        likelihood_foreground = likelihoods[:, 1, :, :] + likelihoods[:, 2, :, :]  # Shape: (B, H, W), combined foreground class
+        
+        # Compute topological loss for immune and cell classes
+        topo_loss = getTopoLoss(likelihood_foreground, ground_truth_foreground)
+
+        loss = (loss_dice+loss_ce) + lamda_pers * topo_loss 
+
     if loss_type == 'BCE_HEM':
         batchBase = False
         loss = nn.BCEWithLogitsLoss(reduction='none')(pred.squeeze(1), target)
@@ -397,6 +509,8 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         loss = BinaryFocalLoss(gamma=2)(pred, target)
     if loss_type == 'mse':
         loss = nn.MSELoss()(pred.squeeze(1), target)
+    if loss_type == 'mseMC':
+        loss = nn.MSELoss()(pred, target)
     if loss_type == 'rmse':
         mse = nn.MSELoss()(pred, target)
         loss = torch.sqrt(mse)
@@ -420,7 +534,6 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         #Method2.2
         loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
         loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        
         loss = 0.5 * loss_ce + 0.5 * loss_dice
     if loss_type == 'dice_score':
         loss = DiceLoss().dice_score(pred, target)

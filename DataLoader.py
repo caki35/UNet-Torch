@@ -32,7 +32,7 @@ def PathologyAugmentationAug(sample, aug):
     
     return {'image': image_aug[0], 'label': segmap_aug[0].get_arr()}
 
-def PathologyAugmentationAugHM(sample, aug):
+def PathologyAugmentationAugHM2(sample, aug):
     image = sample['image']
     label1, label2 = sample['label']
 
@@ -45,6 +45,18 @@ def PathologyAugmentationAugHM(sample, aug):
     # Extract the augmented image and heatmap(s)
     return {'image': image_aug[0], 'label': [heatmaps_aug[0].get_arr()[:,:,0], heatmaps_aug[0].get_arr()[:,:,1]]}
     
+def PathologyAugmentationAugHM(sample, aug):
+    image = sample['image']
+    label = sample['label']
+
+    # Wrap the heatmap(s)
+    heatmaps_obj = HeatmapsOnImage(label, shape=image.shape)
+    
+    # Apply the augmentation
+    image_aug, heatmaps_aug = aug(images=[image], heatmaps=[heatmaps_obj])
+    
+    # Extract the augmented image and heatmap(s)
+    return {'image': image_aug[0], 'label': heatmaps_aug[0].get_arr()}
     
     
 # MASK_AUGMENTERS = ["Sequential", "SomeOf", "OneOf", "Sometimes",
@@ -223,29 +235,112 @@ class Data_Reg(Dataset):
         self.augmentation = augmentation
         self.height = input_size[0]
         self.width = input_size[1]
-        # self.transform = transforms.Compose(
-        #                            [RandomGenerator(output_size=[input_size[0], input_size[1]])])
-        # self.normalizeTorch = transforms.Compose([
-        # transforms.ToTensor(),
-        # transforms.Normalize([0.5], [0.5])
-        # ])
         if self.channel == -2:
             REFERENCE_PATH = '/home/ocaki13/UNet-Torch/color_normalizer.npy'
             REF = np.load(REFERENCE_PATH)
 
             self.NORMALIZER = staintools.StainNormalizer(method='macenko')
             self.NORMALIZER.fit(REF)
+        if self.augmentation:
+            # Define augmentation pipeline IMGAUG.
+            self.aug = iaa.Sequential(iaa.SomeOf((0,2),[
+                iaa.Affine(rotate=(-40, 40), mode="constant",cval=255),
+                iaa.Affine(translate_px={"x": (-40, 40), "y": (-40, 40)}, mode="constant",cval=255),
+                iaa.Fliplr(),
+                iaa.Flipud(),
+                iaa.OneOf([iaa.Affine(rotate=90),
+                iaa.Affine(rotate=180),
+                iaa.Affine(rotate=270)]),
+                iaa.OneOf([iaa.GaussianBlur(sigma=(0.1, 0.25)),
+                iaa.MedianBlur(k=(3)),
+                iaa.Sharpen(alpha=(0.0, 0.3), lightness=(0.8, 1.2))])
+            ]))
+
+            # Define augmentation pipeline IMGAUG.
+            self.transforms_dict = {
+                tio.transforms.RandomAffine(scales=(0.9, 1.2), degrees=40): 0.1,
+                tio.transforms.RandomElasticDeformation(num_control_points=7, locked_borders=2): 0.1,
+                tio.transforms.RandomAnisotropy(axes=(1, 2), downsampling=(2, 4)): 0.1,
+                tio.transforms.RandomBlur(): 0.1,
+                tio.transforms.RandomGhosting(): 0.1,
+                tio.transforms.RandomSpike(num_spikes = 1, intensity= (1, 2)): 0.1,
+                tio.transforms.RandomBiasField(coefficients = 0.2, order= 3): 0.1,
+                tio.RandomGamma(log_gamma=0.1): 0.1,
+            }
+            self._colorJitter = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.01)
+
+        self.Counter = 0
         
     def transform(self, sample):
-        image, label = sample['image'], sample['label']
+        label = sample['label']
+        image = sample['image'] 
 
         if self.augmentation:
-            sample_list = [image,label]
+            # image_org = sample['image'] 
+            # label_org =  sample['label']
+            # label1_org = label_org[:,:,0]
+            # label2_org = label_org[:,:,1]
+            
+            sample_list = [image, label]
             if random.random() > 0.5:
                 sample_list = random_rot_flip(sample_list)
             elif random.random() > 0.5:
                 sample_list = random_rotate(sample_list)
             image, label = sample_list
+            
+            
+            # if random.random() > 0.25:
+                
+            #     # image_org = sample['image'] 
+            #     # label_org =  sample['label']
+            #     # label1_org = label_org[:,:,0]
+            #     # label2_org = label_org[:,:,1]
+            #     sample = PathologyAugmentationAugHM(sample, self.aug)
+            #     image = sample['image'] 
+            #     image = np.array(self._colorJitter(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))))
+            #     image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            #     label = sample['label']
+
+
+            # ##### DEBUG ######            
+            # # Create a vertical line as a separator
+            # self.Counter += 1
+            # label1 = label[:,:,0]
+            # label2 = label[:,:,1]
+            # separator_width = 10
+            # separator = np.zeros((image.shape[0], separator_width, 3), dtype=np.uint8) 
+
+            # # Concatenate the images with the separator
+            # concatenated_image = np.hstack((image_org, separator, image))
+
+            # # Save the concatenated image
+            # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug.png'),concatenated_image)
+
+            # fig, axs = plt.subplots(2, 2)
+            # fig.set_figheight(20)
+            # fig.set_figwidth(20)
+
+            # axs[0,0].imshow(label1_org)
+            # axs[0,0].title.set_text('original other')
+            # fig.text(0.25, 0.5, "count: {}".format(np.sum(label1_org)), ha='center', fontsize=16)
+
+            # axs[0,1].imshow(label1)
+            # axs[0,1].title.set_text('augmented other')
+            # fig.text(0.75, 0.5, "count: {}".format(np.sum(label1)), ha='center', fontsize = 16)
+            
+            # axs[1,0].imshow(label2_org)
+            # axs[1,0].title.set_text('original immune')
+            # fig.text(0.25, 0.08, "count: {}".format(np.sum(label2_org)), ha='center', fontsize = 16)
+
+            # axs[1,1].imshow(label2)
+            # axs[1,1].title.set_text('augmented immune')
+            # fig.text(0.75, 0.08, "count: {}".format(np.sum(label2)), ha='center', fontsize = 16)
+            
+            # fig.savefig(os.path.join('augload/','imgaug'+str(self.Counter)+'aug_label.png'))
+            # fig.clf()
+            # plt.close(fig)  
+                
+
         
         if len(image.shape)==2:
             y, x = image.shape
@@ -269,7 +364,8 @@ class Data_Reg(Dataset):
             image = image.transpose((2, 0, 1))[::-1]
             image = torch.from_numpy(image.astype(np.float32))
 
-        #image = self.normalizeTorch(image.astype(np.float32))
+        #HWC to CHW
+        label = label.transpose((2, 0, 1))
         label = torch.from_numpy(label.astype(np.float32)*200)
         
         sample = {'image': image, 'label': label}
@@ -294,16 +390,9 @@ class Data_Reg(Dataset):
             image = self.NORMALIZER.transform(im_rgb)
 
         label_path =  img_path[:img_path.rfind('.')] + '_label_reg.npy'
-        # label_path_immune =  img_path[:img_path.rfind('.')] + '_label_immune_reg.npy'
-        # label_path_other =  img_path[:img_path.rfind('.')] + '_label_other_reg.npy'
-        label = np.load(label_path)
-        
-        # print(np.sum(label))
-        # print(label)
+        label = np.load(label_path).astype(np.float32)
         sample = {'image': image, 'label': label}
         sample = self.transform(sample)
-        # print(torch.sum(sample['label']))
-        # print(sample['label'])
 
         return sample['image'], sample['label']
 
@@ -389,7 +478,7 @@ class Data_Reg_MT(Dataset):
                 
                 image_org = sample['image'] 
                 label1_org, label2_org =  sample['label']
-                sample = PathologyAugmentationAugHM(sample, self.aug)
+                sample = PathologyAugmentationAugHM2(sample, self.aug)
                 image = sample['image'] 
                 image = np.array(self._colorJitter(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))))
                 image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)

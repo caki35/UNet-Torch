@@ -21,6 +21,7 @@ from scipy.spatial import distance
 import seaborn as sns
 import staintools
 from scipy.stats import pearsonr
+from CrowdMatching import CrowdMatchingTest, GMAE, countAccuracyMetric
 
 image_ext = ['.png', '.jpg', '.tif', '.tiff']
 
@@ -40,6 +41,36 @@ def NoiseFiltering(img, thresh=150):
                 img[label_img == lbl] = 0
     return img
 
+def create_label_coordinates(dataPath, shape=(768,768)):
+    img_label_other = np.zeros(shape, np.float64)
+    img_label_immune = np.zeros(shape, np.float64)
+    data = pd.read_csv(dataPath, sep='\t')
+
+    for index, row in data.iterrows():
+        #x = int(np.rint(row['x']))-1
+        #y = int(np.rint(row['y']))-1
+
+        x = int(np.rint(row['x']/2))-1
+        y = int(np.rint(row['y']/2))-1
+        
+        x = min(x, img_label_other.shape[1])
+        x = max(x, 0)
+        y = min(y, img_label_other.shape[0])
+        y = max(y, 0)
+
+        if row['class'] == 'Stroma':
+            img_label_other[y, x] = 1
+        elif row['class'] == 'normal':
+            img_label_other[y, x] = 1
+        elif row['class'] == 'Tumor':
+            img_label_other[y, x] = 1
+        elif row['class'] == 'Immune cells':
+            img_label_immune[y, x] = 1
+        elif row['class'] in ['endothelium', 'Endothelial', 'Endothelium']:
+            img_label_other[y, x] = 1
+        else:
+            img_label_other[y, x] = 1
+    return img_label_other, img_label_immune
 
 def natural_sort(l):
     def convert(text): return int(text) if text.isdigit() else text.lower()
@@ -119,11 +150,46 @@ REF = np.load(REFERENCE_PATH)
 NORMALIZER = staintools.StainNormalizer(method='macenko')
 NORMALIZER.fit(REF)
 
-def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save_dir):
+def GMAE(L, gtImg, predImg):
+    smoothening_factor = 1e-7
+
+    # Calculate the number of cells
+    num_cells = 4 ** L
+    cell_size = 768 // (2 ** L)
+    
+    # Initialize a list to store the cells
+    gmae_count = 0
+    gmae_AccuracyRelative = 0
+    gmae_AccuracyRelativePD = 0
+
+    # Iterate over the image and extract cells
+    for i in range(0, 768, cell_size):
+        for j in range(0, 768, cell_size):
+            current_GT = gtImg[i:i+cell_size, j:j+cell_size]
+            current_pred = predImg[i:i+cell_size, j:j+cell_size]
+            
+            ##### Count other cells #####
+            CountGt = np.sum(current_GT)
+            CountPred = np.sum(current_pred)
+            ## calculate absolute difference
+            CountAbsDiff = abs(CountGt-CountPred)
+            ## calculate other accuracy
+            AccuracyRelative = round(CountAbsDiff/(max(CountGt,CountPred)+smoothening_factor),4)
+            AccuracyRelativePD =round((2*CountAbsDiff)/(CountGt+CountPred+smoothening_factor),4)
+            
+            gmae_count += CountAbsDiff
+            gmae_AccuracyRelative += AccuracyRelative
+            gmae_AccuracyRelativePD += AccuracyRelativePD
+
+    return [gmae_count, gmae_AccuracyRelative, gmae_AccuracyRelativePD]
+
+def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir):
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     
-
+    sigma_list=[5, 20]
+    sigma_thresh_list=list(np.arange(0.5,1, 0.05))
+    
     sample_list = []
     
     gt_list_immune = []
@@ -146,8 +212,18 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
     accuracy_ratio = []
     AccuracyRelative_ratio = []
     AccuracyRelativePD_ratio = []  
-        
+    
     smoothening_factor = 1e-7
+    G1metrics = []
+    G2metrics = []
+    G3metrics = []
+    
+    arr_prec_immune=np.zeros((len(sigma_list), len(sigma_thresh_list)))
+    arr_recall_immune=np.zeros((len(sigma_list), len(sigma_thresh_list)))
+    arr_f1_immune=np.zeros((len(sigma_list), len(sigma_thresh_list)))
+    arr_prec_other=np.zeros((len(sigma_list), len(sigma_thresh_list)))
+    arr_recall_other=np.zeros((len(sigma_list), len(sigma_thresh_list)))        
+    arr_f1_other=np.zeros((len(sigma_list), len(sigma_thresh_list)))
     
     for img_path in tqdm(image_list):
         image_name = img_path.split('/')[-1]
@@ -186,6 +262,11 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
         pred_other = pred_other/200
         pred_immune = pred_immune/200
 
+        # Read tsv path and create dot map
+        img_name = img_path.split('/')[-1].split('.png')[0]
+        tsv_path = tsv_files[img_name]
+        gt_dot_other, gt_dot_immune = create_label_coordinates(tsv_path)
+
         # read gt mask
         mask_path = img_path[:img_path.rfind('.')] + '_label_other_reg.npy'
         mask_other = np.load(mask_path)
@@ -194,14 +275,9 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
         mask_immune = np.load(mask_path)
         
         ##### Count other cells #####
-        cellCountGt_other = np.sum(mask_other)
+        cellCountGt_other = np.sum(gt_dot_other)
         cellCountPred_other = np.sum(pred_other)
-        ## calculate absolute difference
-        cellCountAbsDiff_other = abs(cellCountGt_other-cellCountPred_other)
-        ## calculate other accuracy
-        otherAccuracy = round(cellCountAbsDiff_other/(cellCountGt_other+smoothening_factor),4)
-        otherAccuracyRelative = round(cellCountAbsDiff_other/max(cellCountGt_other,cellCountPred_other),4)
-        otherAccuracyRelativePD =round((2*cellCountAbsDiff_other)/(cellCountGt_other+cellCountPred_other),4)
+        cellCountAbsDiff_other, otherAccuracy, otherAccuracyRelative, otherAccuracyRelativePD = countAccuracyMetric(cellCountGt_other, cellCountPred_other)
         
         ## add to list
         gt_list_other.append(round(cellCountGt_other, 4))
@@ -212,14 +288,10 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
         AccuracyRelativePD_other.append(round(otherAccuracyRelativePD, 4))
         
         ##### Count immune cells #####
-        cellCountGt_immune = np.sum(mask_immune)
+        cellCountGt_immune = np.sum(gt_dot_immune)
         cellCountPred_immune = np.sum(pred_immune)
         ## calculate absolute difference
-        cellCountAbsDiff_immune =abs(cellCountGt_immune-cellCountPred_immune)
-        ## calculate other accuracy        
-        immuneAccuracy = round(cellCountAbsDiff_immune/(cellCountGt_immune + smoothening_factor),4)
-        immuneAccuracyRelative = round(cellCountAbsDiff_immune/(max(cellCountGt_immune,cellCountPred_immune)+smoothening_factor),4)
-        immuneAccuracyRelativePD = round((2*cellCountAbsDiff_immune)/(cellCountGt_immune + cellCountPred_immune+smoothening_factor),4)
+        cellCountAbsDiff_immune, immuneAccuracy, immuneAccuracyRelative, immuneAccuracyRelativePD = countAccuracyMetric(cellCountGt_immune, cellCountPred_immune)
         
         #add to list
         gt_list_immune.append(round(cellCountGt_immune,4))
@@ -232,12 +304,7 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
         # calculate GT and Pred ratio
         ratioGT = cellCountGt_immune/(cellCountGt_other+cellCountGt_immune)
         ratioPred = cellCountPred_immune/(cellCountPred_other+cellCountPred_immune)
-        # calculate abs difference
-        abs_diff_ratio = abs(ratioGT-ratioPred)
-        # calculate accuracy
-        ratioAccuracy = round(abs_diff_ratio/(ratioGT+smoothening_factor),4)
-        ratioAccuracyRelative = round(abs_diff_ratio/(max(ratioGT,ratioPred)+smoothening_factor),4)
-        ratioAccuracyRelativePD = round((2*abs_diff_ratio)/(ratioGT+ratioPred+smoothening_factor),4)
+        abs_diff_ratio, ratioAccuracy, ratioAccuracyRelative, ratioAccuracyRelativePD = countAccuracyMetric(ratioGT, ratioPred)
                 
         gt_list_ratio.append(ratioGT)
         pred_list_ratio.append(ratioPred)
@@ -246,48 +313,77 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
         AccuracyRelative_ratio.append(ratioAccuracyRelative)
         AccuracyRelativePD_ratio.append(ratioAccuracyRelativePD)
         
-        fig, axs = plt.subplots(2, 3)
-        fig.set_figheight(20)
-        fig.set_figwidth(30)
-        if len(img_org.shape) == 3:
-            axs[0, 0].imshow(img_org)
-            axs[0, 0].title.set_text('image')
-            axs[1, 0].imshow(img_org)
-        else:
-            axs[0, 0].imshow(img_org, cmap='gray')
-            axs[0, 0].title.set_text('image')
-            axs[1, 0].imshow(img_org, cmap='gray')
+        if False:
+            fig, axs = plt.subplots(2, 3)
+            fig.set_figheight(20)
+            fig.set_figwidth(30)
+            if len(img_org.shape) == 3:
+                axs[0, 0].imshow(img_org)
+                axs[0, 0].title.set_text('image')
+                axs[1, 0].imshow(img_org)
+            else:
+                axs[0, 0].imshow(img_org, cmap='gray')
+                axs[0, 0].title.set_text('image')
+                axs[1, 0].imshow(img_org, cmap='gray')
 
-        axs[0, 1].imshow(mask_immune)
-        axs[0, 1].title.set_text('label immune')
-        fig.text(.51, .5, "immune count: {}".format(cellCountGt_immune), ha='center', fontsize = 16)
-        axs[0, 2].imshow(pred_immune)
-        axs[0, 2].title.set_text('prediction immune')
-        fig.text(.75, .5, "immune count: {}".format(cellCountPred_immune), fontsize = 16)
+            axs[0, 1].imshow(mask_immune)
+            axs[0, 1].title.set_text('label immune')
+            fig.text(.51, .5, "immune count: {}".format(cellCountGt_immune), ha='center', fontsize = 16)
+            axs[0, 2].imshow(pred_immune)
+            axs[0, 2].title.set_text('prediction immune')
+            fig.text(.75, .5, "immune count: {}".format(cellCountPred_immune), fontsize = 16)
 
-        axs[1, 1].imshow(mask_other)
-        axs[1, 1].title.set_text('label other')
-        fig.text(.51, .08, "other count: {}".format(cellCountGt_other), ha='center', fontsize = 16)
-        axs[1, 2].imshow(pred_other)
-        axs[1, 2].title.set_text('prediction other')
-        fig.text(.75, .08, "other count: {}".format(cellCountPred_other), fontsize = 16)
+            axs[1, 1].imshow(mask_other)
+            axs[1, 1].title.set_text('label other')
+            fig.text(.51, .08, "other count: {}".format(cellCountGt_other), ha='center', fontsize = 16)
+            axs[1, 2].imshow(pred_other)
+            axs[1, 2].title.set_text('prediction other')
+            fig.text(.75, .08, "other count: {}".format(cellCountPred_other), fontsize = 16)
+            
+            fig.savefig(os.path.join(save_dir,image_name))
+            fig.clf()
+            plt.close(fig)
+            image_name2 = image_name[:image_name.rfind('.')]
+            # a colormap and a normalization 
+            cmap = plt.cm.viridis
+
+            plt.imsave(os.path.join(save_dir,image_name2+'_pred_other.png'), pred_other, cmap=cmap)
+            plt.imsave(os.path.join(save_dir,image_name2+'_gt_other.png'), mask_other, cmap=cmap)
+            plt.imsave(os.path.join(save_dir,image_name2+'_pred_immune.png'), pred_immune, cmap=cmap)
+            plt.imsave(os.path.join(save_dir,image_name2+'_gt_immune.png'), mask_immune, cmap=cmap)
+
+        gmae_cell_res = GMAE(1, gt_dot_other, pred_other)
+        gmae_immune_res = GMAE(1, gt_dot_immune, pred_immune)
+        G1metrics.append(gmae_cell_res+gmae_immune_res)
         
-        fig.savefig(os.path.join(save_dir,image_name))
-        fig.clf()
-        plt.close(fig)
-        image_name2 = image_name[:image_name.rfind('.')]
-        # a colormap and a normalization 
-        cmap = plt.cm.viridis
-
-        plt.imsave(os.path.join(save_dir,image_name2+'_pred_other.png'), pred_other, cmap=cmap)
-        plt.imsave(os.path.join(save_dir,image_name2+'_gt_other.png'), mask_other, cmap=cmap)
-        plt.imsave(os.path.join(save_dir,image_name2+'_pred_immune.png'), pred_immune, cmap=cmap)
-        plt.imsave(os.path.join(save_dir,image_name2+'_gt_immune.png'), mask_immune, cmap=cmap)
-
-
-
-
+        gmae_cell_res = GMAE(2, gt_dot_other, pred_other)
+        gmae_immune_res = GMAE(2, gt_dot_immune, pred_immune)
+        G2metrics.append(gmae_cell_res+gmae_immune_res)
         
+        gmae_cell_res = GMAE(3, gt_dot_other, pred_other)
+        gmae_immune_res = GMAE(3, gt_dot_immune, pred_immune)
+        G3metrics.append(gmae_cell_res+gmae_immune_res)
+                
+        arr_prec_current, arr_recall_current, arr_f1_current = CrowdMatchingTest(gt_dot_immune, 
+                                                                                 pred_immune, 
+                                                                                 sigma_list,
+                                                                                 sigma_thresh_list,
+                                                                                 inputType='Regression')
+        arr_prec_immune += arr_prec_current
+        arr_recall_immune += arr_recall_current
+        arr_f1_immune += arr_f1_current
+        
+        arr_prec_current, arr_recall_current, arr_f1_current = CrowdMatchingTest(gt_dot_other, 
+                                                                                 pred_other, 
+                                                                                 sigma_list,
+                                                                                 sigma_thresh_list,
+                                                                                 inputType='Regression')
+        
+        arr_prec_other += arr_prec_current
+        arr_recall_other += arr_recall_current
+        arr_f1_other += arr_f1_current
+
+
     plt.scatter(gt_list_immune, pred_list_immune, c ="black")
     plt.xlabel('golds')
     plt.ylabel('predictions')
@@ -383,6 +479,78 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
     perf_dt2 = pd.DataFrame(performace_results_mean)
     perf_dt2.to_csv(os.path.join(save_dir,'resultsDataMean.csv'), index=False)
     
+    # Column names (corresponding to your returned values)
+    columns = [
+        "gmae_cell",
+        "gmae_cellAccuracyRelative",
+        "gmae_cellAccuracyRelativePD",
+        "gmae_immune",
+        "gmae_immuneAccuracyRelative",
+        "gmae_immuneAccuracyRelativePD",
+    ]
+
+    # Convert to DataFrame
+    df1 = pd.DataFrame(G1metrics, columns=columns)
+    df2 = pd.DataFrame(G2metrics, columns=columns)
+    df3 = pd.DataFrame(G3metrics, columns=columns)
+    
+    column_means1 = df1.mean().to_numpy()  # Or use .values for older pandas versions
+    column_means2 = df2.mean().to_numpy()  # Or use .values for older pandas versions
+    column_means3 = df3.mean().to_numpy()  # Or use .values for older pandas versions
+
+    data = [column_means1, column_means2, column_means3]
+    res = pd.DataFrame(data, columns=columns, index=["G(1)", "G(2)", "G(3)"])
+    res.to_csv(os.path.join(save_dir,'resultsGridCount.csv'), index=True)
+    
+    arr_f1_immune /= len(sample_list)
+    arr_prec_immune /= len(sample_list)
+    arr_recall_immune /= len(sample_list)
+    
+    arr_f1_other /= len(sample_list)
+    arr_prec_other /= len(sample_list)
+    arr_recall_other /= len(sample_list)
+    
+    columns = [
+        "prec_cell",
+        "recall_cell",
+        "f1_cell",
+        "prec_immune",
+        "recall_immune",
+        "f1_immune"
+    ]
+        
+    index=["sigma(5)", "sigma(20)", "sigma(5)_09", "sigma(20)_09"]
+    
+    sigma5prec_immune, sigma20prec_immune = np.mean(arr_prec_immune, axis=1)
+    sigma5recall_immune, sigma20recall_immune = np.mean(arr_recall_immune, axis=1)
+    sigma5f1_immune, sigma20f1_immune = np.mean(arr_f1_immune, axis=1)
+    
+    sigma5prec_other, sigma20prec_other = np.mean(arr_prec_other, axis=1)
+    sigma5recall_other, sigma20recall_other = np.mean(arr_recall_other, axis=1)
+    sigma5f1_other, sigma20f1_other = np.mean(arr_f1_other, axis=1)
+
+    
+    row1 = [sigma5prec_other, sigma5recall_other, sigma5f1_other , sigma5prec_immune, sigma5recall_immune, sigma5f1_immune]
+    row2 = [sigma20prec_other, sigma20recall_other, sigma20f1_other, sigma20prec_immune, sigma20recall_immune, sigma20f1_immune]
+    
+    sigma5prec_immune, sigma20prec_immune = np.mean(arr_prec_immune[:,:-1], axis=1)
+    sigma5recall_immune, sigma20recall_immune = np.mean(arr_recall_immune[:,:-1], axis=1)
+    sigma5f1_immune, sigma20f1_immune = np.mean(arr_f1_immune[:,:-1], axis=1)
+
+    sigma5prec_other, sigma20prec_other = np.mean(arr_prec_other[:,:-1], axis=1)
+    sigma5recall_other, sigma20recall_other = np.mean(arr_recall_other[:,:-1], axis=1)
+    sigma5f1_other, sigma20f1_other = np.mean(arr_f1_other[:,:-1], axis=1)
+
+    row3 = [sigma5prec_other, sigma5recall_other, sigma5f1_other, sigma5prec_immune, sigma5recall_immune, sigma5f1_immune]
+    row4 = [sigma20prec_other, sigma20recall_other, sigma20f1_other, sigma20prec_immune, sigma20recall_immune, sigma20f1_immune]    
+
+    # Create DataFrame
+    res = pd.DataFrame([row1, row2, row3, row4], columns=columns, index=index)
+
+    # Save DataFrame as CSV
+    res.to_csv(os.path.join(save_dir,'resultsMatching.csv'), index=True)
+    
+    
     delete_index = []
     for i in range(0,len(sample_list)):
         if gt_list_immune[i]<25 or pred_list_immune[i]<25:
@@ -456,15 +624,27 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save
     return performace_results_mean
 
 
+def getPointsFromTsv(tsv_path):
+    import glob
+    files = glob.glob(tsv_path+'*.tsv')
+    dataset={}
+    for i, label in enumerate(files):
+        labelName = label.split('.tsv')[0].split('.png-points')[0].split('/')[-1]
+        labelName = labelName.split('-he')[0].split('-HE')[0].split('/')[-1]
+        dataset[labelName] = label
+    return dataset
+
 def main():
     
     save_dir = 'rrr'
-    test_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768_reg/fold2/test/'
+    test_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold3/test/'
     image_list = get_image_list(test_path)
+    tsv_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'
+    tsv_files = getPointsFromTsv(tsv_path)
     modelType = 'TransUnet' #Unet
-    input_size = (384,384)
+    input_size = (768,768)
     use_cuda = True
-    model_path = 'traintestdeneme/traintestdeneme_seed25/models/epoch5.pt'
+    model_path = '/media/ocaki13/KINGSTON/results/multitaskUC/seros_exp4_64TransUNet_reg_wonorm_UC_fold3/seros_exp4_64TransUNet_reg_wonorm_UC_fold3_seed11/epoch171.pt'
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
     Num_Class = 1
@@ -487,7 +667,7 @@ def main():
     model.load_state_dict(torch.load(model_path))
     model.eval()
 
-    resDict = test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, save_dir)
+    resDict = test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
 
 
     

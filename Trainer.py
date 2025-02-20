@@ -96,7 +96,10 @@ class Trainer():
 
     def train(self):
         if self.model_type in ['single' ,'TransUnet','regression', 'regression_t', 'attention']:
-            self.singe_train()
+            if self.loss_function in ['TopoCount', 'TopoCount2', 'TopoLoss', 'TopoLoss2','MyTopoLoss1']:
+                self.singe_train_wup()
+            else:
+                self.singe_train()
         elif self.model_type in ['multi_task', 'multi_task_reg', 'multi_task_regTU']:
             if self.loss_function == 'multi_task_loss':
                 self.multi_task_uc_train()
@@ -114,6 +117,7 @@ class Trainer():
         file = open(log_file, 'a')
 
         total_memory = f'{torch.cuda.get_device_properties(0).total_memory/ 1E9 if torch.cuda.is_available() else 0:.3g}G'
+
         for epoch in range(self.start_epoch, self.num_epochs+1):
             # dice_loss_list = []
             # hd_loss_list = []
@@ -139,11 +143,11 @@ class Trainer():
 
                 batch_step = 0
                 with tqdm(self.dataloader[phase], unit="batch") as tbar:
-                    for inputs, label_mask in tbar:
+                    for inputs, labels in tbar:
                         tbar.set_description(f"Epoch {epoch}")
                         batch_step += 1
                         inputs = inputs.to(self.device).type(self.dtype)
-                        label_mask = label_mask.to(
+                        labels = labels.to(
                             self.device).type(self.dtype)
 
                         # forward
@@ -154,12 +158,12 @@ class Trainer():
                             if self.model_type in ['regression', 'regression_t']:
                                 output_mask = F.relu(output_mask)
                                 
-                            if epoch > self.warm_up:
-                                loss = calc_loss(output_mask, label_mask,
-                                                 loss_type=self.loss_function)
+                            if epoch < 5:
+                                loss = calc_loss(output_mask, labels,
+                                                loss_type='dice_bce_mc')
                             else:
-                                loss = calc_loss(output_mask, label_mask,
-                                                 loss_type='BCE')
+                                loss = calc_loss(output_mask, labels,
+                                loss_type=self.loss_function)
 
                             reserved = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'
                             mem = reserved + '/' + total_memory
@@ -180,18 +184,17 @@ class Trainer():
                                 tbar.set_postfix(
                                     loss=epoch_loss/batch_step, memory=mem)
                             else:
-                                epoch_loss += loss.item()
-                                val_score += calc_loss(output_mask, label_mask,
-                                                       loss_type=self.accuracy_metric)
+                                epoch_loss += loss.item()                                
+                                val_score += loss.item()                           
                                 tbar.set_postfix(loss=epoch_loss/batch_step,
-                                                 accuracy=(val_score.item()/(batch_step)), memory=mem)
+                                                 accuracy=(val_score/(batch_step)), memory=mem)
 
                 epoch_loss /= batch_step
                 # deep copy the model
                 if phase == 'val':
                     val_score /= batch_step
                     self.val_loss_list.append(epoch_loss)
-                    self.val_score_list.append(val_score.item())
+                    self.val_score_list.append(val_score)
                     print("Val loss on epoch %i: %f" % (epoch, epoch_loss))
                     print("Val score on epoch %i: %f" % (epoch, val_score))
 
@@ -199,14 +202,13 @@ class Trainer():
                     file.write((f"Val score on epoch {epoch}: {val_score}"))
                     file.write("\n")
 
-                    if epoch_loss < self.best_loss:
+                    if val_score < self.best_val_score and epoch>5:
                         self.early_stop_counter = 0
                         self.best_val_score = val_score
                         print("saving best model")
                         file.write("saving best model")
                         file.write("\n")
-                        if epoch > self.warm_up:
-                            self.best_loss = epoch_loss
+                        self.best_loss = epoch_loss
                         self.best_model = copy.deepcopy(
                             self.model.state_dict())
                         model_name = 'epoch{}.pt'.format(epoch)
@@ -237,6 +239,9 @@ class Trainer():
 
                         return self.model
                 else:
+                    # mean_hd = sum(hd_loss_list)/len(hd_loss_list)
+                    # mead_dice = sum(dice_loss_list)/len(dice_loss_list)
+                    # gamma = mean_hd/mead_dice
                     self.train_loss_list.append(epoch_loss)
                     print("Train loss on epoch %i: %f" % (epoch, epoch_loss))
                     file.write((f"Train loss on epoch {epoch}: {epoch_loss}"))
@@ -264,7 +269,7 @@ class Trainer():
         # load best model weights
         self.model.load_state_dict(self.best_model)
         return self.model
-
+    
     def singe_train(self):
         if not os.path.exists(self.output_save_dir):
             os.mkdir(self.output_save_dir)
@@ -272,7 +277,7 @@ class Trainer():
         file = open(log_file, 'a')
 
         total_memory = f'{torch.cuda.get_device_properties(0).total_memory/ 1E9 if torch.cuda.is_available() else 0:.3g}G'
-
+        totaltime = 0
         for epoch in range(self.start_epoch, self.num_epochs+1):
             # dice_loss_list = []
             # hd_loss_list = []
@@ -293,6 +298,7 @@ class Trainer():
                         file.write(f"LR {param_group['lr']}")
                         file.write("\n")
                     self.model.train()  # Set model to training mode
+                    since = time.time()
                 else:
                     self.model.eval()  # Set model to evaluate mode
 
@@ -394,11 +400,22 @@ class Trainer():
                     # mean_hd = sum(hd_loss_list)/len(hd_loss_list)
                     # mead_dice = sum(dice_loss_list)/len(dice_loss_list)
                     # gamma = mean_hd/mead_dice
+                    time_elapsed = time.time() - since
+                    print('Training Time for this epoch: {:.0f}m {:.0f}s\n'.format(
+                        time_elapsed // 60, time_elapsed % 60))
+                    file.write('Training Time for this epoch: {:.0f}m {:.0f}s\n'.format(
+                        time_elapsed // 60, time_elapsed % 60))
+                    file.write("\n")
                     self.train_loss_list.append(epoch_loss)
                     print("Train loss on epoch %i: %f" % (epoch, epoch_loss))
                     file.write((f"Train loss on epoch {epoch}: {epoch_loss}"))
                     file.write("\n")
-
+                    totaltime += time_elapsed
+                    self.meanTimePerEpoch = totaltime/epoch
+                    print('Curent mean training time per epoch: {:.0f}m {:.0f}s\n'.format(
+                        self.meanTimePerEpoch // 60, self.meanTimePerEpoch % 60))
+                    file.write('Curent mean training time per epoch: {:.0f}m {:.0f}s\n'.format(
+                        self.meanTimePerEpoch // 60, self.meanTimePerEpoch % 60))                    
                     torch.save(self.model.state_dict(), os.path.join(
                         self.save_dir_model, 'last_epoch.pt'))
 
@@ -822,9 +839,9 @@ class Trainer():
                             output2 = torch.nn.functional.relu(output2)
                                                       
                             loss1 = calc_loss(output1, label1,
-                                              loss_type=self.loss_function)
+                                              loss_type='mse')
                             loss2 = calc_loss(output2, label2,
-                                              loss_type=self.loss_function)
+                                              loss_type='mse')
 
                             cellCountGt_immune = torch.sum(label1,axis=(1,2))
                             cellCountPred_immune = torch.sum(output1.squeeze(1),axis=(1,2))
@@ -871,6 +888,8 @@ class Trainer():
                 loss1_current_epoch /= batch_step
                 loss2_current_epoch /= batch_step
                 if phase == 'val':
+                    if epoch <= 5:
+                        continue
                     if self.lr_scheduler:
                         # lr_scheduler.step(epoch_loss)
                         self.lr_scheduler.step(val_score)

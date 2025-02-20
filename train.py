@@ -22,7 +22,7 @@ from TransUnet.vit_seg_modeling import VisionTransformer as ViT_seg
 from TransUnet.vit_seg_modeling import VisionTransformerMultitask as ViT_seg_MT
 from TransUnet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from test import test_single, get_image_list
-from test_mc3serousv5 import test_single_mc
+from test_mc3serousv5 import test_single_mc, test_single_reg
 from test_reg3serousv5mt import test_multiple_reg
 import pandas as pd
 import glob
@@ -125,6 +125,16 @@ def check_input(dataloaders, titles=["Input", 'Target']):
         ulti = make_grid([grid_img1, grid_img2], nrow=1)
         save_image(ulti, 'val_batch.png')
 
+def getPointsFromTsv(tsv_path):
+    import glob
+    files = glob.glob(tsv_path+'*.tsv')
+    dataset={}
+    for i, label in enumerate(files):
+        labelName = label.split('.tsv')[0].split('.png-points')[0].split('/')[-1]
+        labelName = labelName.split('-he')[0].split('-HE')[0].split('/')[-1]
+        dataset[labelName] = label
+    return dataset
+
 
 def main(cfg):
 
@@ -154,6 +164,7 @@ def main(cfg):
     train_path = cfg['dataset_config']['train_path']
     val_path = cfg['dataset_config']['val_path']
     test_path = cfg['dataset_config']['test_path']
+    tsv_files = getPointsFromTsv(cfg['dataset_config']['dot_annotation_path'])
     deleteNonBestModels = True
     if test_path:
         test_image_list = get_image_list(test_path[0])
@@ -308,9 +319,11 @@ def main(cfg):
             print('Testing best model:')
             if model_type in ['attention', 'single', 'TransUnet']:
                 #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
-                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, tsv_files, output_save_dir)
             elif model_type in ['multi_task_regTU','multi_task_reg', 'fourier1']:
                 currResultsDict = test_multiple_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+            elif model_type in ['regression','regression_t']:
+                currResultsDict = test_single_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
             else:
                 continue
             resultsDict[currentSeed] = currResultsDict

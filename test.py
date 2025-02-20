@@ -333,17 +333,17 @@ def test_single(model, device, input_size, ch, numClass, image_list, save_dir):
 
 def main():
     
-    save_dir = 'res3'
+    save_dir = 'res1'
     test_path = '/home/ocaki13/projects/ultrasound/processed_data/ultrasoundSegmentationDatasetv2_resized_won/fold1/test/'
     image_list = get_image_list(test_path)
     modelType = 'TransUnet' #Unet
     input_size = (800,800)
     use_cuda = True
-    model_path = '/home/ocaki13/projects/ultrasound/segmentationResults/exp4/us_exp4_wouaug_fold1/us_exp4_wouaug_fold1_seed629/epoch16.pt'
+    model_path = '/home/ocaki13/projects/ultrasound/segmentationResults/exp4/TransUNet/us_exp4_wouaug_fold1/us_exp4_wouaug_fold1_seed629/epoch16.pt'
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
     Num_Class = 4
-    ch = 3
+    ch = 1
     
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
