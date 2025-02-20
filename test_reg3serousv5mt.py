@@ -150,39 +150,6 @@ REF = np.load(REFERENCE_PATH)
 NORMALIZER = staintools.StainNormalizer(method='macenko')
 NORMALIZER.fit(REF)
 
-def GMAE(L, gtImg, predImg):
-    smoothening_factor = 1e-7
-
-    # Calculate the number of cells
-    num_cells = 4 ** L
-    cell_size = 768 // (2 ** L)
-    
-    # Initialize a list to store the cells
-    gmae_count = 0
-    gmae_AccuracyRelative = 0
-    gmae_AccuracyRelativePD = 0
-
-    # Iterate over the image and extract cells
-    for i in range(0, 768, cell_size):
-        for j in range(0, 768, cell_size):
-            current_GT = gtImg[i:i+cell_size, j:j+cell_size]
-            current_pred = predImg[i:i+cell_size, j:j+cell_size]
-            
-            ##### Count other cells #####
-            CountGt = np.sum(current_GT)
-            CountPred = np.sum(current_pred)
-            ## calculate absolute difference
-            CountAbsDiff = abs(CountGt-CountPred)
-            ## calculate other accuracy
-            AccuracyRelative = round(CountAbsDiff/(max(CountGt,CountPred)+smoothening_factor),4)
-            AccuracyRelativePD =round((2*CountAbsDiff)/(CountGt+CountPred+smoothening_factor),4)
-            
-            gmae_count += CountAbsDiff
-            gmae_AccuracyRelative += AccuracyRelative
-            gmae_AccuracyRelativePD += AccuracyRelativePD
-
-    return [gmae_count, gmae_AccuracyRelative, gmae_AccuracyRelativePD]
-
 def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir):
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)

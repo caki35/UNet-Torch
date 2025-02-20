@@ -46,6 +46,7 @@ class Trainer():
         self.train_loss_list_2 = []
         self.val_loss_list_2 = []
         self.early_stop_counter = 0
+        self.meanTimePerEpoch = 0
 
         self.save_dir_model = os.path.join(self.output_save_dir, 'models/')
         os.makedirs(self.save_dir_model, exist_ok=True)

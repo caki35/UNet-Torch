@@ -262,6 +262,8 @@ def main(cfg):
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Binary(
                 val_path, ch, anydepth, False, input_size=input_size)
+            model = UNet_attention(ch, num_class, initial_filter_size,
+                        use_cuda, dropout, dropout_p)
         else:
             raise ValueError('Invalid model_type "%s"' % model_type)
 

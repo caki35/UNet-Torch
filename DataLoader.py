@@ -698,6 +698,12 @@ class Data_Binary(Dataset):
                 # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug.png'),concatenated_image)
                 # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug_label.png'),concatenated_label)
 
+            # sample_list = [image, label]
+            # if random.random() > 0.5:
+            #     sample_list = random_rot_flip(sample_list)
+            # elif random.random() > 0.5:
+            #     sample_list = random_rotate(sample_list)
+            # image, label = sample_list
 
         if len(image.shape)==2:
             y, x = image.shape
@@ -744,6 +750,7 @@ class Data_Binary(Dataset):
             im_rgb = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
             image = self.NORMALIZER.transform(im_rgb)
 
+        #label_path =  img_path[:img_path.rfind('.')] + '_label.png'
         label_path =  img_path[:img_path.rfind('.')] + '_label_mc.png'
         label = cv2.imread(label_path, 0)
         sample = {'image': image, 'label': label}
