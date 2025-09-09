@@ -267,6 +267,34 @@ def CrowdMatchingTest2(g_dot, estimation, sigma_list, sigma_thresh_list, inputTy
             
     return arr_prec, arr_recall, arr_f1
 
+def CrowdMatchingTest2(gt_dot, predLocalization, thresh):
+    #data = pd.read_csv(tsv_path, sep='\t')
+    tp = 0
+    e_coord_x, e_coord_y = predLocalization
+    if len(e_coord_x) == 0:
+        return 0,0,0
+    e_detected_list  = np.zeros(len(e_coord_y))
+    gt_y, gt_x = np.where(gt_dot!=0)
+    for i in range(0,len(gt_x)):
+        #x = int(np.rint(row['x']))-1
+        #y = int(np.rint(row['y']))-1
+        available = e_detected_list == 0
+        xGt = gt_x[i]
+        yGt = gt_y[i]
+        distances = np.full_like(e_coord_y, np.inf, dtype=float)
+        distances[available] = np.sqrt((e_coord_y[available] - yGt)**2 + (e_coord_x[available] - xGt)**2)
+        
+        mindist_idx = np.argmin(distances)
+        mindist = distances[mindist_idx]
+
+        if mindist<thresh and e_detected_list[mindist_idx]!=1:
+            tp+=1
+            e_detected_list[mindist_idx] = 1
+    prec = tp / len(e_detected_list)
+    recall = tp/ len(gt_x)
+    f1score = 2*prec*recall/(prec+recall+1e-7)
+    return prec, recall, f1score
+
 def countAccuracyMetric(countGT, countPred):
     '''
     Takes two integer: ground-truth and estimated count
@@ -281,7 +309,7 @@ def countAccuracyMetric(countGT, countPred):
 def GMAE(L, gtImg, predImg):
     # Calculate the number of cells
     num_cells = 4 ** L
-    cell_size = 768 // (2 ** L)
+    cell_size = 512 // (2 ** L)
     
     # Initialize a list to store the cells
     gmae_cell = 0
@@ -289,12 +317,12 @@ def GMAE(L, gtImg, predImg):
     gmae_cellAccuracyRelativePD = 0
 
     # Iterate over the image and extract cells
-    for i in range(0, 768, cell_size):
-        for j in range(0, 768, cell_size):
+    for i in range(0, 512, cell_size):
+        for j in range(0, 512, cell_size):
             current_GT = gtImg[i:i+cell_size, j:j+cell_size]
             current_pred = predImg[i:i+cell_size, j:j+cell_size]
-            cellCountGt = np.sum(current_GT)
-            cellCountPred = np.sum(current_pred)                
+            cellCountGt = int(np.sum(current_GT))
+            cellCountPred = int(np.sum(current_pred))                
             abs_diff_cell, _, cellAccuracyRelative, cellAccuracyRelativePD = countAccuracyMetric(cellCountGt, cellCountPred)
             gmae_cell += abs_diff_cell
             gmae_cellAccuracyRelative += cellAccuracyRelative

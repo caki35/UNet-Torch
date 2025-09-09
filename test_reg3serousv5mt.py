@@ -313,7 +313,7 @@ def test_multiple_reg(model, device, input_size, ch, Num_Class, image_list, tsv_
         AccuracyRelative_ratio.append(ratioAccuracyRelative)
         AccuracyRelativePD_ratio.append(ratioAccuracyRelativePD)
         
-        if False:
+        if True:
             fig, axs = plt.subplots(2, 3)
             fig.set_figheight(20)
             fig.set_figwidth(30)
@@ -644,7 +644,7 @@ def main():
     modelType = 'TransUnet' #Unet
     input_size = (768,768)
     use_cuda = True
-    model_path = '/media/ocaki13/KINGSTON/results/multitaskUC/seros_exp4_64TransUNet_reg_wonorm_UC_fold3/seros_exp4_64TransUNet_reg_wonorm_UC_fold3_seed11/epoch171.pt'
+    model_path = '/home/ocaki13/Desktop/recovery/a/FSCK0413.pt'
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
     Num_Class = 1

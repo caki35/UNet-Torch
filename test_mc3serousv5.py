@@ -757,97 +757,97 @@ class Results2Class:
         #### filter below 25 #####
         
         
-        #### filter below 25 #####
-        imageNamesFiltered = []
-        cellCountsFiltered = []
-        cellCountsFilteredGT = []
-        cellCountsFilteredPred = []
-        cellCountsFilteredAccuracy = []
-        cellCountsFilteredAbsDiff = []
-        cellCountsFilteredRD = []
-        cellCountsFilteredRDP = []
+        # #### filter below 25 #####
+        # imageNamesFiltered = []
+        # cellCountsFiltered = []
+        # cellCountsFilteredGT = []
+        # cellCountsFilteredPred = []
+        # cellCountsFilteredAccuracy = []
+        # cellCountsFilteredAbsDiff = []
+        # cellCountsFilteredRD = []
+        # cellCountsFilteredRDP = []
         
-        immuneCountsFilteredGT = []
-        immuneCountsFilteredPred = []
-        immuneCountsFilteredAccuracy = []
-        immuneCountsFilteredAbsDiff = []
-        immuneCountsFilteredRD = []
-        immuneCountsFilteredRDP = []
+        # immuneCountsFilteredGT = []
+        # immuneCountsFilteredPred = []
+        # immuneCountsFilteredAccuracy = []
+        # immuneCountsFilteredAbsDiff = []
+        # immuneCountsFilteredRD = []
+        # immuneCountsFilteredRDP = []
         
-        ratioFilteredGT = []
-        ratioFilteredPred = []
-        ratioFilteredAccuracy = []
-        ratioFilteredAbsDiff = []
-        ratioFilteredRD = []
-        ratioFilteredRDP = []
+        # ratioFilteredGT = []
+        # ratioFilteredPred = []
+        # ratioFilteredAccuracy = []
+        # ratioFilteredAbsDiff = []
+        # ratioFilteredRD = []
+        # ratioFilteredRDP = []
 
 
-        for i, immuneNum in enumerate(self.immuneCounts['GT']):
-            if immuneNum<=25 or self.immuneCounts['Pred'][i]<25:
-                continue
-            imageNamesFiltered.append(self.imageNames[i])
-            cellCountsFilteredGT.append(self.cellCounts['GT'][i])
-            cellCountsFilteredPred.append(self.cellCounts['Pred'][i])
-            cellCountsFilteredAccuracy.append(self.cellCounts['Accuracy'][i])
-            cellCountsFilteredAbsDiff.append(self.cellCounts['AbsDiff'][i])
-            cellCountsFilteredRD.append(self.cellCounts['AccuracyRelative'][i])
-            cellCountsFilteredRDP.append(self.cellCounts['AccuracyRelativePD'][i])
+        # for i, immuneNum in enumerate(self.immuneCounts['GT']):
+        #     if immuneNum<=25 or self.immuneCounts['Pred'][i]<25:
+        #         continue
+        #     imageNamesFiltered.append(self.imageNames[i])
+        #     cellCountsFilteredGT.append(self.cellCounts['GT'][i])
+        #     cellCountsFilteredPred.append(self.cellCounts['Pred'][i])
+        #     cellCountsFilteredAccuracy.append(self.cellCounts['Accuracy'][i])
+        #     cellCountsFilteredAbsDiff.append(self.cellCounts['AbsDiff'][i])
+        #     cellCountsFilteredRD.append(self.cellCounts['AccuracyRelative'][i])
+        #     cellCountsFilteredRDP.append(self.cellCounts['AccuracyRelativePD'][i])
             
-            immuneCountsFilteredGT.append(self.immuneCounts['GT'][i])
-            immuneCountsFilteredPred.append(self.immuneCounts['Pred'][i])
-            immuneCountsFilteredAccuracy.append(self.immuneCounts['Accuracy'][i])
-            immuneCountsFilteredAbsDiff.append(self.immuneCounts['AbsDiff'][i])
-            immuneCountsFilteredRD.append(self.immuneCounts['AccuracyRelative'][i])
-            immuneCountsFilteredRDP.append(self.immuneCounts['AccuracyRelativePD'][i])
+        #     immuneCountsFilteredGT.append(self.immuneCounts['GT'][i])
+        #     immuneCountsFilteredPred.append(self.immuneCounts['Pred'][i])
+        #     immuneCountsFilteredAccuracy.append(self.immuneCounts['Accuracy'][i])
+        #     immuneCountsFilteredAbsDiff.append(self.immuneCounts['AbsDiff'][i])
+        #     immuneCountsFilteredRD.append(self.immuneCounts['AccuracyRelative'][i])
+        #     immuneCountsFilteredRDP.append(self.immuneCounts['AccuracyRelativePD'][i])
             
-            ratioFilteredGT.append(self.ratio['GT'][i])
-            ratioFilteredPred.append(self.ratio['Pred'][i])
-            ratioFilteredAccuracy.append(self.ratio['Accuracy'][i])
-            ratioFilteredAbsDiff.append(self.ratio['GT'][i])
-            ratioFilteredRD.append(self.ratio['AccuracyRelative'][i])
-            ratioFilteredRDP.append(self.ratio['AccuracyRelativePD'][i])
+        #     ratioFilteredGT.append(self.ratio['GT'][i])
+        #     ratioFilteredPred.append(self.ratio['Pred'][i])
+        #     ratioFilteredAccuracy.append(self.ratio['Accuracy'][i])
+        #     ratioFilteredAbsDiff.append(self.ratio['GT'][i])
+        #     ratioFilteredRD.append(self.ratio['AccuracyRelative'][i])
+        #     ratioFilteredRDP.append(self.ratio['AccuracyRelativePD'][i])
             
-        performace_results_filtered = {'sample name':imageNamesFiltered, 'cell count Gold':cellCountsFilteredGT,
-                              'cell count Pred':cellCountsFilteredPred,
-                            'cell abs diff': cellCountsFilteredAbsDiff,
-                              'cell accuracy': cellCountsFilteredAccuracy,
-                            'cell accuracy RD':cellCountsFilteredRD,
-                            'cell accuracy RD Perantage':cellCountsFilteredRDP,     
+        # performace_results_filtered = {'sample name':imageNamesFiltered, 'cell count Gold':cellCountsFilteredGT,
+        #                       'cell count Pred':cellCountsFilteredPred,
+        #                     'cell abs diff': cellCountsFilteredAbsDiff,
+        #                       'cell accuracy': cellCountsFilteredAccuracy,
+        #                     'cell accuracy RD':cellCountsFilteredRD,
+        #                     'cell accuracy RD Perantage':cellCountsFilteredRDP,     
                               
-                              'immune count Gold':immuneCountsFilteredGT,
-                            'immune count Pred':immuneCountsFilteredPred,
-                            'immune abs diff': immuneCountsFilteredAbsDiff,
-                            'immune accuracy': immuneCountsFilteredAccuracy,
-                            'immune accuracy RD': immuneCountsFilteredRD,
-                            'immune accuracy RD Perantage':immuneCountsFilteredRDP,        
+        #                       'immune count Gold':immuneCountsFilteredGT,
+        #                     'immune count Pred':immuneCountsFilteredPred,
+        #                     'immune abs diff': immuneCountsFilteredAbsDiff,
+        #                     'immune accuracy': immuneCountsFilteredAccuracy,
+        #                     'immune accuracy RD': immuneCountsFilteredRD,
+        #                     'immune accuracy RD Perantage':immuneCountsFilteredRDP,        
                                                 
-                            'ratio Gold':ratioFilteredGT,
-                            'ratio Pred':ratioFilteredPred,
-                            'ratio abs diff': ratioFilteredAbsDiff,
-                            'ratio accuracy': ratioFilteredAccuracy,
-                            'ratio accuracy RD': ratioFilteredRD,
-                            'ratio accuracy RD Perantage': ratioFilteredRDP}
-        perf_dt_filtered = pd.DataFrame(performace_results_filtered)
-        perf_dt_filtered.to_csv(os.path.join(self.save_dir,'resultsDataFiltred.csv'), index=False)
+        #                     'ratio Gold':ratioFilteredGT,
+        #                     'ratio Pred':ratioFilteredPred,
+        #                     'ratio abs diff': ratioFilteredAbsDiff,
+        #                     'ratio accuracy': ratioFilteredAccuracy,
+        #                     'ratio accuracy RD': ratioFilteredRD,
+        #                     'ratio accuracy RD Perantage': ratioFilteredRDP}
+        # perf_dt_filtered = pd.DataFrame(performace_results_filtered)
+        # perf_dt_filtered.to_csv(os.path.join(self.save_dir,'resultsDataFiltred.csv'), index=False)
         
-        performace_results_filtered = {
-                    'Cell MAE': round(sum(cellCountsFilteredAbsDiff)/len(cellCountsFilteredAbsDiff),4),
-                        'Cell Accuracy': round(sum(cellCountsFilteredAccuracy)/len(cellCountsFilteredAccuracy),4),
-                    'Cell Accuracy RD': round(sum(cellCountsFilteredRD)/len(cellCountsFilteredRD),4),
-                    'Cell Accuracy RPD': round(sum(cellCountsFilteredRDP)/len(cellCountsFilteredRDP),4),
+        # performace_results_filtered = {
+        #             'Cell MAE': round(sum(cellCountsFilteredAbsDiff)/len(cellCountsFilteredAbsDiff),4),
+        #                 'Cell Accuracy': round(sum(cellCountsFilteredAccuracy)/len(cellCountsFilteredAccuracy),4),
+        #             'Cell Accuracy RD': round(sum(cellCountsFilteredRD)/len(cellCountsFilteredRD),4),
+        #             'Cell Accuracy RPD': round(sum(cellCountsFilteredRDP)/len(cellCountsFilteredRDP),4),
 
-                    'Immune MAE': round(sum(immuneCountsFilteredAbsDiff)/len(immuneCountsFilteredAbsDiff),4),
-                        'Immune Accuracy': round(sum(immuneCountsFilteredAccuracy)/len(immuneCountsFilteredAccuracy),4),
-                    'Immune Accuracy RD': round(sum(immuneCountsFilteredRD)/len(immuneCountsFilteredRD),4),
-                    'Immune Accuracy RPD': round(sum(immuneCountsFilteredRDP)/len(immuneCountsFilteredRDP),4),
+        #             'Immune MAE': round(sum(immuneCountsFilteredAbsDiff)/len(immuneCountsFilteredAbsDiff),4),
+        #                 'Immune Accuracy': round(sum(immuneCountsFilteredAccuracy)/len(immuneCountsFilteredAccuracy),4),
+        #             'Immune Accuracy RD': round(sum(immuneCountsFilteredRD)/len(immuneCountsFilteredRD),4),
+        #             'Immune Accuracy RPD': round(sum(immuneCountsFilteredRDP)/len(immuneCountsFilteredRDP),4),
                     
-                        'Ratio MAE': round(sum(ratioFilteredAbsDiff)/len(ratioFilteredAbsDiff),4),
-                        'Ratio Accuracy': round(sum(ratioFilteredAccuracy)/len(ratioFilteredAccuracy),4),
-                    'Ratio Accuracy RD': round(sum(ratioFilteredRD)/len(ratioFilteredRD),4),
-                    'Ratio Accuracy RPD': round(sum(ratioFilteredRDP)/len(ratioFilteredRDP),4)}
+        #                 'Ratio MAE': round(sum(ratioFilteredAbsDiff)/len(ratioFilteredAbsDiff),4),
+        #                 'Ratio Accuracy': round(sum(ratioFilteredAccuracy)/len(ratioFilteredAccuracy),4),
+        #             'Ratio Accuracy RD': round(sum(ratioFilteredRD)/len(ratioFilteredRD),4),
+        #             'Ratio Accuracy RPD': round(sum(ratioFilteredRDP)/len(ratioFilteredRDP),4)}
         
-        perf_dt2 = pd.DataFrame(performace_results_filtered, index=[0])
-        perf_dt2.to_csv(os.path.join(self.save_dir,'resultsFiltered.csv'), index=False)
+        # perf_dt2 = pd.DataFrame(performace_results_filtered, index=[0])
+        # perf_dt2.to_csv(os.path.join(self.save_dir,'resultsFiltered.csv'), index=False)
         
     def getResults(self):
         return self.performace_results
@@ -1270,75 +1270,75 @@ def test_single_reg(model, device, input_size, ch, Num_Class, image_list, tsv_fi
     # Save DataFrame as CSV
     res.to_csv(os.path.join(save_dir,'resultsMatching.csv'), index=True)
     
-    delete_index = []
-    for i in range(0,len(sample_list)):
-        if gt_list_immune[i]<25 or pred_list_immune[i]<25:
-            delete_index.append(i)
+    # delete_index = []
+    # for i in range(0,len(sample_list)):
+    #     if gt_list_immune[i]<25 or pred_list_immune[i]<25:
+    #         delete_index.append(i)
             
-    for i in sorted(delete_index, reverse=True):
-        del(sample_list[i])
+    # for i in sorted(delete_index, reverse=True):
+    #     del(sample_list[i])
 
-        del(gt_list_immune[i])
-        del(pred_list_immune[i])
-        del(Absdiff_list_immune[i])
-        del(accuracy_immune[i])
-        del(AccuracyRelative_immune[i])
-        del(AccuracyRelativePD_immune[i])
+    #     del(gt_list_immune[i])
+    #     del(pred_list_immune[i])
+    #     del(Absdiff_list_immune[i])
+    #     del(accuracy_immune[i])
+    #     del(AccuracyRelative_immune[i])
+    #     del(AccuracyRelativePD_immune[i])
         
-        del(gt_list_other[i])
-        del(pred_list_other[i])
-        del(Absdiff_list_other[i])
-        del(accuracy_other[i])
-        del(AccuracyRelative_other[i])
-        del(AccuracyRelativePD_other[i])   
+    #     del(gt_list_other[i])
+    #     del(pred_list_other[i])
+    #     del(Absdiff_list_other[i])
+    #     del(accuracy_other[i])
+    #     del(AccuracyRelative_other[i])
+    #     del(AccuracyRelativePD_other[i])   
         
-        del(gt_list_ratio[i])
-        del(pred_list_ratio[i])
-        del(Absdiff_list_ratio[i])
-        del(accuracy_ratio[i])
-        del(AccuracyRelative_ratio[i])
-        del(AccuracyRelativePD_ratio[i]) 
+    #     del(gt_list_ratio[i])
+    #     del(pred_list_ratio[i])
+    #     del(Absdiff_list_ratio[i])
+    #     del(accuracy_ratio[i])
+    #     del(AccuracyRelative_ratio[i])
+    #     del(AccuracyRelativePD_ratio[i]) 
         
-    performace_results = {'sample name':sample_list,
-                    'cell count Gold':gt_list_other,
-                    'cell count Pred': pred_list_other,
-                'cell abs diff': Absdiff_list_other,
-                    'cell accuracy': accuracy_other,
-                'cell accuracy RD': AccuracyRelative_other,
-                'cell accuracy RD Perantage':AccuracyRelativePD_other,     
-                'immune count Gold':gt_list_immune,
-                'immune count Pred':pred_list_immune,
-                'immune abs diff':Absdiff_list_immune,
-                'immune accuracy':accuracy_immune,
-                'immune accuracy RD':AccuracyRelative_immune,
-                'immune accuracy RD Perantage':AccuracyRelativePD_immune,                            
-                'ratio Gold':gt_list_ratio,
-                'ratio Pred':pred_list_ratio,
-                'ratio abs diff': Absdiff_list_ratio,
-                'ratio accuracy': accuracy_ratio,
-                'ratio accuracy RD': AccuracyRelative_ratio,
-                'ratio accuracy RD Perantage':AccuracyRelativePD_ratio}
+    # performace_results = {'sample name':sample_list,
+    #                 'cell count Gold':gt_list_other,
+    #                 'cell count Pred': pred_list_other,
+    #             'cell abs diff': Absdiff_list_other,
+    #                 'cell accuracy': accuracy_other,
+    #             'cell accuracy RD': AccuracyRelative_other,
+    #             'cell accuracy RD Perantage':AccuracyRelativePD_other,     
+    #             'immune count Gold':gt_list_immune,
+    #             'immune count Pred':pred_list_immune,
+    #             'immune abs diff':Absdiff_list_immune,
+    #             'immune accuracy':accuracy_immune,
+    #             'immune accuracy RD':AccuracyRelative_immune,
+    #             'immune accuracy RD Perantage':AccuracyRelativePD_immune,                            
+    #             'ratio Gold':gt_list_ratio,
+    #             'ratio Pred':pred_list_ratio,
+    #             'ratio abs diff': Absdiff_list_ratio,
+    #             'ratio accuracy': accuracy_ratio,
+    #             'ratio accuracy RD': AccuracyRelative_ratio,
+    #             'ratio accuracy RD Perantage':AccuracyRelativePD_ratio}
 
-    perf_dt = pd.DataFrame(performace_results)
-    perf_dt.to_csv(os.path.join(save_dir,'resultsDataFiltered.csv'), index=False)
+    # perf_dt = pd.DataFrame(performace_results)
+    # perf_dt.to_csv(os.path.join(save_dir,'resultsDataFiltered.csv'), index=False)
             
 
-    performace_results_mean_filtered = {
-                'Cell Absolute Difference': [round(sum(Absdiff_list_other)/len(Absdiff_list_other),4)],
-                    'Cell Accuracy': [round(sum(accuracy_other)/len(accuracy_other),4)],
-                'Cell Accuracy RD': [round(sum(AccuracyRelative_other)/len(AccuracyRelative_other),4)],
-                'Cell Accuracy RPD': [round(sum(AccuracyRelativePD_other)/len(AccuracyRelativePD_other),4)],
-                'Immune Absolute Difference': [round(sum(Absdiff_list_immune)/len(Absdiff_list_immune),4)],
-                    'Immune Accuracy': [round(sum(accuracy_immune)/len(accuracy_immune),4)],
-                'Immune Accuracy RD': [round(sum(AccuracyRelative_immune)/len(AccuracyRelative_immune),4)],
-                'Immune Accuracy RPD': [round(sum(AccuracyRelativePD_immune)/len(AccuracyRelativePD_immune),4)],     
-                    'Ratio Absolute Difference': [round(sum(Absdiff_list_ratio)/len(Absdiff_list_ratio),4)],
-                    'Ratio Accuracy': [round(sum(accuracy_ratio)/len(accuracy_ratio),4)],
-                'Ratio Accuracy RD': [round(sum(AccuracyRelative_ratio)/len(AccuracyRelative_ratio),4)],
-                'Ratio Accuracy RPD': [round(sum(AccuracyRelativePD_ratio)/len(AccuracyRelativePD_ratio),4)]}
+    # performace_results_mean_filtered = {
+    #             'Cell Absolute Difference': [round(sum(Absdiff_list_other)/len(Absdiff_list_other),4)],
+    #                 'Cell Accuracy': [round(sum(accuracy_other)/len(accuracy_other),4)],
+    #             'Cell Accuracy RD': [round(sum(AccuracyRelative_other)/len(AccuracyRelative_other),4)],
+    #             'Cell Accuracy RPD': [round(sum(AccuracyRelativePD_other)/len(AccuracyRelativePD_other),4)],
+    #             'Immune Absolute Difference': [round(sum(Absdiff_list_immune)/len(Absdiff_list_immune),4)],
+    #                 'Immune Accuracy': [round(sum(accuracy_immune)/len(accuracy_immune),4)],
+    #             'Immune Accuracy RD': [round(sum(AccuracyRelative_immune)/len(AccuracyRelative_immune),4)],
+    #             'Immune Accuracy RPD': [round(sum(AccuracyRelativePD_immune)/len(AccuracyRelativePD_immune),4)],     
+    #                 'Ratio Absolute Difference': [round(sum(Absdiff_list_ratio)/len(Absdiff_list_ratio),4)],
+    #                 'Ratio Accuracy': [round(sum(accuracy_ratio)/len(accuracy_ratio),4)],
+    #             'Ratio Accuracy RD': [round(sum(AccuracyRelative_ratio)/len(AccuracyRelative_ratio),4)],
+    #             'Ratio Accuracy RPD': [round(sum(AccuracyRelativePD_ratio)/len(AccuracyRelativePD_ratio),4)]}
     
-    perf_dt2 = pd.DataFrame(performace_results_mean_filtered)
-    perf_dt2.to_csv(os.path.join(save_dir,'resultsDataMeanFiltered.csv'), index=False)
+    # perf_dt2 = pd.DataFrame(performace_results_mean_filtered)
+    # perf_dt2.to_csv(os.path.join(save_dir,'resultsDataMeanFiltered.csv'), index=False)
     
     return performace_results_mean
 
@@ -1354,8 +1354,8 @@ def getPointsFromTsv(tsv_path):
 
 def main():
     
-    save_dir = 'denemeReg2'
-    test_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold3/test/'
+    save_dir = 'denemeMC1'
+    test_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/test/'
     tsv_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'
     tsv_files = getPointsFromTsv(tsv_path)
     
@@ -1363,10 +1363,10 @@ def main():
     modelType = 'TransUnet' #Unet
     input_size = (768,768)
     use_cuda = True
-    model_path = '/media/ocaki13/KINGSTON/results/SingleReg/seros_exp5_singleReg_fold3/seros_exp5_singleReg_fold3_seed11/models/best.pt'
+    model_path = '/media/ocaki13/12F63DCFF63DB437/TopoRes/base/seros_exp5_singleClass_dicebce_fold1/seros_exp5_singleClass_dicebce_fold1_seed11/models/best.pt'
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
-    Num_Class = 2
+    Num_Class = 3
     ch = 3
     
     if modelType == 'TransUnet':
@@ -1387,8 +1387,8 @@ def main():
     model.eval()
 
 
-    #resDict = test_single_mc(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
-    resDict = test_single_reg(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
+    resDict = test_single_mc(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
+    #resDict = test_single_reg(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
 
 
     

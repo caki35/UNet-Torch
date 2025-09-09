@@ -522,6 +522,120 @@ class VisionTransformerMultitask(nn.Module):
                 for bname, block in self.transformer.embeddings.hybrid_model.body.named_children():
                     for uname, unit in block.named_children():
                         unit.load_from(res_weight, n_block=bname, n_unit=uname)
+                        
+class VisionTransformerMultitaskEM(nn.Module):
+    def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
+        super(VisionTransformerMultitaskEM, self).__init__()
+        self.num_classes = num_classes
+        self.zero_head = zero_head
+        self.classifier = config.classifier
+        self.transformer = Transformer(config, img_size, vis)
+        self.decoder1 = DecoderCup(config)
+        self.decoder2 = DecoderCup(config)
+        self.decoder3 = DecoderCup(config)
+        self.decoder4 = DecoderCup(config)
+        self.decoder5 = DecoderCup(config)
+        self.decoder6 = DecoderCup(config)
+        self.segmentation_head1 = SegmentationHead(
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
+            kernel_size=3,
+        )
+        self.segmentation_head2 = SegmentationHead(
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
+            kernel_size=3,
+        )
+        self.segmentation_head3 = SegmentationHead(
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
+            kernel_size=3,
+        )
+        self.segmentation_head4 = SegmentationHead(
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
+            kernel_size=3,
+        )
+        self.segmentation_head5 = SegmentationHead(
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
+            kernel_size=3,
+        )
+        self.segmentation_head6 = SegmentationHead(
+            in_channels=config['decoder_channels'][-1],
+            out_channels=config['n_classes'],
+            kernel_size=3,
+        )
+        self.config = config
+
+    def forward(self, x):
+        #######!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##################
+        if x.size()[1] == 1:
+            x = x.repeat(1,3,1,1)
+        x, attn_weights, features = self.transformer(x)  # (B, n_patch, hidden)
+        xdecod1 = self.decoder1(x, features)
+        xdecod2 = self.decoder2(x, features)
+        xdecod3 = self.decoder3(x, features)
+        xdecod4 = self.decoder4(x, features)
+        xdecod5 = self.decoder5(x, features)
+        xdecod6 = self.decoder6(x, features)
+        logits1 = self.segmentation_head1(xdecod1)
+        logits2 = self.segmentation_head2(xdecod2)
+        logits3 = self.segmentation_head3(xdecod3)
+        logits4 = self.segmentation_head4(xdecod4)
+        logits5 = self.segmentation_head5(xdecod5)
+        logits6 = self.segmentation_head6(xdecod6)
+        
+        return logits1, logits2, logits3, logits4, logits5, logits6
+
+    def load_from(self, weights):
+        with torch.no_grad():
+
+            res_weight = weights
+            self.transformer.embeddings.patch_embeddings.weight.copy_(np2th(weights["embedding/kernel"], conv=True))
+            self.transformer.embeddings.patch_embeddings.bias.copy_(np2th(weights["embedding/bias"]))
+
+            self.transformer.encoder.encoder_norm.weight.copy_(np2th(weights["Transformer/encoder_norm/scale"]))
+            self.transformer.encoder.encoder_norm.bias.copy_(np2th(weights["Transformer/encoder_norm/bias"]))
+
+            posemb = np2th(weights["Transformer/posembed_input/pos_embedding"])
+
+            posemb_new = self.transformer.embeddings.position_embeddings
+            if posemb.size() == posemb_new.size():
+                self.transformer.embeddings.position_embeddings.copy_(posemb)
+            elif posemb.size()[1]-1 == posemb_new.size()[1]:
+                posemb = posemb[:, 1:]
+                self.transformer.embeddings.position_embeddings.copy_(posemb)
+            else:
+                logger.info("load_pretrained: resized variant: %s to %s" % (posemb.size(), posemb_new.size()))
+                ntok_new = posemb_new.size(1)
+                if self.classifier == "seg":
+                    _, posemb_grid = posemb[:, :1], posemb[0, 1:]
+                gs_old = int(np.sqrt(len(posemb_grid)))
+                gs_new = int(np.sqrt(ntok_new))
+                print('load_pretrained: grid-size from %s to %s' % (gs_old, gs_new))
+                posemb_grid = posemb_grid.reshape(gs_old, gs_old, -1)
+                zoom = (gs_new / gs_old, gs_new / gs_old, 1)
+                posemb_grid = ndimage.zoom(posemb_grid, zoom, order=1)  # th2np
+                posemb_grid = posemb_grid.reshape(1, gs_new * gs_new, -1)
+                posemb = posemb_grid
+                self.transformer.embeddings.position_embeddings.copy_(np2th(posemb))
+
+            # Encoder whole
+            for bname, block in self.transformer.encoder.named_children():
+                for uname, unit in block.named_children():
+                    unit.load_from(weights, n_block=uname)
+
+            if self.transformer.embeddings.hybrid:
+                self.transformer.embeddings.hybrid_model.root.conv.weight.copy_(np2th(res_weight["conv_root/kernel"], conv=True))
+                gn_weight = np2th(res_weight["gn_root/scale"]).view(-1)
+                gn_bias = np2th(res_weight["gn_root/bias"]).view(-1)
+                self.transformer.embeddings.hybrid_model.root.gn.weight.copy_(gn_weight)
+                self.transformer.embeddings.hybrid_model.root.gn.bias.copy_(gn_bias)
+
+                for bname, block in self.transformer.embeddings.hybrid_model.body.named_children():
+                    for uname, unit in block.named_children():
+                        unit.load_from(res_weight, n_block=bname, n_unit=uname)
 
 CONFIGS = {
     'ViT-B_16': configs.get_b16_config(),

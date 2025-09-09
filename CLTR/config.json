@@ -1,0 +1,52 @@
+dataset_config:
+  augmentation: true
+  class_names:
+  - background
+  - other cell
+  - immune cell
+  dot_annotation_path: /home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/
+  save_dir: CLTR
+  test_path:
+  - /home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/test/
+  train_path:
+  - /home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/train/
+  val_path:
+  - /home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/val/
+model_config:
+  anydepth: false
+  channel: 3
+  drop_out_rate:
+  - 0.2
+  dropout: false
+  initial_filter_size:
+  - 64
+  input_size:
+  - 384
+  - 384
+  kernel:
+  - 3
+  model: UNet1
+  model_type: CLTR
+  num_class: 1
+resume:
+  epoch: 75
+  flag: false
+  path: hd_exp1_123_bs/models/last_epoch.pt
+train_config:
+  accuracy: MyTopoLossVR
+  adaptive_lr: false
+  batch_size:
+  - 2
+  early_stop: 30
+  epochs: 15
+  loss: MyTopoLossVR
+  lr_rate:
+  - 0.0005
+  num_workers: 20
+  optimizer: Adam
+  seed:
+  - 11
+  - 15
+  use_cuda: true
+  weight_decay:
+  - 0.0001

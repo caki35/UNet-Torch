@@ -7,9 +7,6 @@ from scipy.ndimage.morphology import distance_transform_edt as edt
 import numpy as np
 import cv2
 from scipy.ndimage import convolve
-from topoloss_pytorch import getTopoLoss
-from topoCount import topoCountloss
-from myTopoLoss import PointCloudFiltration
 global CLASS_NUMBER
 
 class ActiveContourLoss(nn.Module):
@@ -215,45 +212,135 @@ class HausdorffDTLoss(nn.Module):
             return loss
 
 
+# class DiceLoss(nn.Module):
+#     def __init__(self, n_classes):
+#         super(DiceLoss, self).__init__()
+#         self.n_classes = n_classes
+
+#     def _one_hot_encoder(self, input_tensor):
+#         tensor_list = []
+#         for i in range(self.n_classes):
+#             temp_prob = input_tensor == i  # * torch.ones_like(input_tensor)
+#             tensor_list.append(temp_prob.unsqueeze(1))
+#         output_tensor = torch.cat(tensor_list, dim=1)
+#         return output_tensor.float()
+
+#     def _dice_loss(self, score, target):
+#         target = target.float()
+#         smooth = 1e-5
+#         intersect = torch.sum(score * target)
+#         y_sum = torch.sum(target * target)
+#         z_sum = torch.sum(score * score)
+#         loss = (2 * intersect + smooth) / (z_sum + y_sum + smooth)
+#         loss = 1 - loss
+#         return loss
+
+#     def forward(self, inputs, target, weight=None, softmax=False):
+#         if softmax:
+#             inputs = torch.softmax(inputs, dim=1)
+#         target = self._one_hot_encoder(target)
+#         if weight is None:
+#             weight = [1] * self.n_classes
+#         assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(), target.size())
+#         class_wise_dice = []
+#         loss = 0.0
+#         for i in range(0, self.n_classes):
+#             dice = self._dice_loss(inputs[:, i], target[:, i])
+#             class_wise_dice.append(1.0 - dice.item())
+#             loss += dice * weight[i]
+#         return loss / self.n_classes
+
 class DiceLoss(nn.Module):
-    def __init__(self, n_classes):
+    def __init__(self, smooth=1e-6, multiclass=False):
         super(DiceLoss, self).__init__()
-        self.n_classes = n_classes
+        self.smooth = smooth
+        self.multiclass = multiclass
 
-    def _one_hot_encoder(self, input_tensor):
-        tensor_list = []
-        for i in range(self.n_classes):
-            temp_prob = input_tensor == i  # * torch.ones_like(input_tensor)
-            tensor_list.append(temp_prob.unsqueeze(1))
-        output_tensor = torch.cat(tensor_list, dim=1)
-        return output_tensor.float()
+    def dice_score(self, inputs, targets):
+        inputs = F.sigmoid(inputs)
 
-    def _dice_loss(self, score, target):
-        target = target.float()
-        smooth = 1e-5
-        intersect = torch.sum(score * target)
-        y_sum = torch.sum(target * target)
-        z_sum = torch.sum(score * score)
-        loss = (2 * intersect + smooth) / (z_sum + y_sum + smooth)
-        loss = 1 - loss
-        return loss
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
 
-    def forward(self, inputs, target, weight=None, softmax=False):
-        if softmax:
-            inputs = torch.softmax(inputs, dim=1)
-        target = self._one_hot_encoder(target)
-        if weight is None:
-            weight = [1] * self.n_classes
-        assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(), target.size())
-        class_wise_dice = []
-        loss = 0.0
-        for i in range(0, self.n_classes):
-            dice = self._dice_loss(inputs[:, i], target[:, i])
-            class_wise_dice.append(1.0 - dice.item())
-            loss += dice * weight[i]
-        return loss / self.n_classes
+        intersection = (inputs * targets).sum()
+        dice_score = (2.*intersection + self.smooth) / \
+            (inputs.sum() + targets.sum() + self.smooth)
+        return dice_score
 
+    def dice_score_mc(self, inputs, targets):
+        inputs = F.softmax(inputs)
+        targets = F.one_hot(
+            targets.long(), 5).permute(0, 3, 1, 2)
+        inputs = inputs.flatten(0, 1)
+        targets = targets.flatten(0, 1)
+        intersection = (inputs * targets).sum()
+        dice_score = (2.*intersection + self.smooth) / \
+            (inputs.sum() + targets.sum() + self.smooth)
+        return dice_score
+    
 
+    def forward(self, inputs, targets):
+        if self.multiclass:
+            dice_score = self.dice_score_mc(inputs, targets)
+        else:
+            dice_score = self.dice_score(inputs, targets)
+        return 1 - dice_score
+    
+class BinaryDiceLoss(nn.Module):
+    """Dice loss of binary class
+    Args:
+        ignore_index: Specifies a target value that is ignored and does not contribute to the input gradient
+        reduction: Specifies the reduction to apply to the output: 'none' | 'mean' | 'sum'
+    Shapes:
+        output: A tensor of shape [N, *] without sigmoid activation function applied
+        target: A tensor of shape same with output
+    Returns:
+        Loss tensor according to arg reduction
+    Raise:
+        Exception if unexpected reduction
+    """
+
+    def __init__(self, ignore_index=None, batch_dice=None, use_sigmoid=True, reduction='mean', **kwargs):
+        super(BinaryDiceLoss, self).__init__()
+        self.smooth = 1  # suggest set a large number when target area is large,like '10|100'
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.use_sigmoid = use_sigmoid
+        self.batch_dice = False  # treat a large map when True
+        if 'batch_loss' in kwargs.keys():
+            self.batch_dice = kwargs['batch_loss']
+
+    def forward(self, output, target):
+        assert output.shape[0] == target.shape[0], "output & target batch size don't match"
+        if self.use_sigmoid:
+            output = torch.sigmoid(output)
+
+        if self.ignore_index is not None:
+            validmask = (target != self.ignore_index).float()
+            output = output.mul(validmask)  # can not use inplace for bp
+            target = target.float().mul(validmask)
+
+        dim0 = output.shape[0]
+        if self.batch_dice:
+            dim0 = 1
+
+        output = output.contiguous().view(dim0, -1)
+        target = target.contiguous().view(dim0, -1).float()
+
+        num = 2 * torch.sum(torch.mul(output, target), dim=1) + self.smooth
+        den = torch.sum(output.abs() + target.abs(), dim=1) + self.smooth
+
+        loss = 1 - (num / den)
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        elif self.reduction == 'none':
+            return loss
+        else:
+            raise Exception('Unexpected reduction {}'.format(self.reduction))
+    
 class MultitaskUncertaintyLoss(nn.Module):
     def __init__(self):
         super(MultitaskUncertaintyLoss, self).__init__()
@@ -366,121 +453,32 @@ class FocalTverskyLoss(nn.Module):
             losses = torch.stack(losses)
             loss = losses.mean()
         return loss
+    
+def MRAccuracy(pred, target):
+    batch_size = target.shape[0]
+    target = target.cpu().numpy()
+    pred_sigm = torch.sigmoid(pred.squeeze(1))
+    pred_bin = pred_sigm.data.cpu().numpy()
+    pred_bin[pred_bin >= 0.5] = 1
+    pred_bin[pred_bin < 0.5] = 0
+    mre = 0
+    for batch in range(batch_size):
+        count_gt = int(np.sum(target[batch]))
+        count_pred, _ = cv2.connectedComponents(pred_bin[batch].astype(np.uint8), connectivity=8)
+        # Subtract 1 for background
+        if count_gt != 0:
+            mre += abs(count_gt-(count_pred-1))/(count_gt)
+        else:
+            if count_pred !=1:
+                mre += 1                
+    mre/=batch_size
+    return mre
 
 def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
     if loss_type == 'BCE':
         loss = nn.BCEWithLogitsLoss()(pred.squeeze(1), target)
     if loss_type == 'TopK':
         loss = TopKLoss()(pred, target)
-    if loss_type == 'MyTopoLoss1':
-        lamda_pers = 0.001
-        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
-        # Step 1: Apply softmax to convert logits into probabilities
-        # Softmax is applied along the class dimension (dim=1)
-        likelihood = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
-        out = torch.argmax(likelihood, dim=1).cpu().detach().numpy()
-        
-        # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
-        ground_truth_cells = (target == 1).cpu().numpy().astype(np.uint8)   # Convert cell mask (class 1) to binary
-        ground_truth_immune = (target == 2).cpu().numpy().astype(np.uint8) # Convert immune mask (class 2) to binary
-        
-        total_loss_pers = 0
-        for batch in range(out.shape[0]):
-            
-            # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
-            pred_cells = (out[batch] == 1).astype(np.uint8)  # Convert cell mask (class 1) to binary
-            pred_immune = (out[batch] == 2).astype(np.uint8)  # Convert immune mask (class 2) to binary
-            total_loss_pers += PointCloudFiltration(ground_truth_cells[batch], pred_cells, 'betti',p=2)
-            total_loss_pers += PointCloudFiltration(ground_truth_immune[batch], pred_immune, 'betti',p=2)
-        total_loss_pers /= out.shape[0]
-        total_loss_pers = torch.tensor(total_loss_pers, dtype=torch.float32, device=pred.device)
-
-        loss = (0.5 * loss_ce + 0.5 * loss_dice)*(1+(lamda_pers*total_loss_pers))
-        
-    if loss_type == 'TopoCount':
-        lamda_pers = 1
-        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
-        # Step 1: Apply softmax to convert logits into probabilities
-        # Softmax is applied along the class dimension (dim=1)
-        likelihood = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
-        
-        # Step 2: Extract the probabilities for the two classes of interest
-        # Class 1: Immune (index 1 in the channel dimension)
-        likelihood_cells  = likelihood[:, 1, :, :]  # Shape: (B, H, W)
-        
-        # Class 2: Cells (index 2 in the channel dimension)
-        likelihood_immune = likelihood[:, 2, :, :]  # Shape: (B, H, W)
-        
-        # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
-        ground_truth_cells = (target == 1).float()   # Convert cell mask (class 1) to binary
-        ground_truth_immune = (target == 2).float()  # Convert immune mask (class 2) to binary
-        
-        # Compute topological loss for immune and cell classes
-        topo_loss_cells = topoCountloss(likelihood_cells.unsqueeze(1), ground_truth_cells.unsqueeze(1))
-        topo_loss_immune = topoCountloss(likelihood_immune.unsqueeze(1), ground_truth_immune.unsqueeze(1))
-
-        loss = (loss_dice+loss_ce) +(lamda_pers * (topo_loss_immune+topo_loss_cells)) 
-    if loss_type == 'TopoCount2':
-        lamda_pers = 1
-        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
-        # Step 1: Apply softmax to convert logits into probabilities
-        # Softmax is applied along the class dimension (dim=1)
-        likelihoods = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
-        
-        
-        ground_truth_foreground = (target != 0).float()  
-        print(torch.unique(ground_truth_foreground))
-        likelihood_foreground = likelihoods[:, 1, :, :] + likelihoods[:, 2, :, :]  # Shape: (B, H, W), combined foreground class
-        
-        # Compute topological loss for immune and cell classes
-        topo_loss = topoCountloss(likelihood_foreground.unsqueeze(1), ground_truth_foreground.unsqueeze(1))
-
-        loss = (loss_dice+loss_ce) + lamda_pers * topo_loss 
-    if loss_type == 'TopoLoss':
-        lamda_pers = 0.0001
-        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
-        # Step 1: Apply softmax to convert logits into probabilities
-        # Softmax is applied along the class dimension (dim=1)
-        likelihood = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
-        
-        # Step 2: Extract the probabilities for the two classes of interest
-        # Class 1: Immune (index 1 in the channel dimension)
-        likelihood_cells  = likelihood[:, 1, :, :]  # Shape: (B, H, W)
-        
-        # Class 2: Cells (index 2 in the channel dimension)
-        likelihood_immune = likelihood[:, 2, :, :]  # Shape: (B, H, W)
-        
-        # Assume ground_truth_immune and ground_truth_cells are the binary masks for the immune and cell classes
-        ground_truth_cells = (target == 1).float()   # Convert cell mask (class 1) to binary
-        ground_truth_immune = (target == 2).float()  # Convert immune mask (class 2) to binary
-        # Compute topological loss for immune and cell classes
-        topo_loss_cells = getTopoLoss(likelihood_cells, ground_truth_cells)
-        topo_loss_immune = getTopoLoss(likelihood_immune, ground_truth_immune)
-
-        loss = (loss_dice+loss_ce) +(lamda_pers * (topo_loss_immune+topo_loss_cells)) 
-
-    if loss_type == 'TopoLoss2':
-        lamda_pers = 0.00005
-        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
-        loss_ce = nn.CrossEntropyLoss()(pred, target[:].long())
-        # Step 1: Apply softmax to convert logits into probabilities
-        # Softmax is applied along the class dimension (dim=1)
-        likelihoods = F.softmax(pred, dim=1)  # Shape: (B, 3, H, W)
-        
-        # Ground-truth for foreground vs background
-        ground_truth_foreground = (target != 0).float()  
-        # Ground-truth for foreground vs background
-        likelihood_foreground = likelihoods[:, 1, :, :] + likelihoods[:, 2, :, :]  # Shape: (B, H, W), combined foreground class
-        
-        # Compute topological loss for immune and cell classes
-        topo_loss = getTopoLoss(likelihood_foreground, ground_truth_foreground)
-
-        loss = (loss_dice+loss_ce) + lamda_pers * topo_loss 
-
     if loss_type == 'BCE_HEM':
         batchBase = False
         loss = nn.BCEWithLogitsLoss(reduction='none')(pred.squeeze(1), target)
@@ -520,7 +518,7 @@ def calc_loss(pred, target, bce_weight=0.5, loss_type='mse'):
         loss = DiceLoss()(pred, target)
     if loss_type == 'dice_bce':
         loss_bce = nn.BCEWithLogitsLoss()(pred.squeeze(1), target)
-        loss_dice = DiceLoss(CLASS_NUMBER)(pred, target, softmax=True)
+        loss_dice = BinaryDiceLoss()(pred.squeeze(1), target)
         loss = 0.5 * loss_bce + 0.5 * loss_dice
     if loss_type == 'dice_bce_mc':
         #Method1

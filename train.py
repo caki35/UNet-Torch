@@ -1,5 +1,5 @@
 import torch
-from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg, Data_Reg_MT
+from DataLoader import Data_Reg_Binary, Data_Binary, Data_Reg, Data_Reg_MT, DataPointReg, DataRandomCrop
 import loss
 from torchvision.utils import make_grid, save_image
 import random
@@ -20,8 +20,10 @@ import matplotlib.pyplot as plt
 from Trainer import Trainer
 from TransUnet.vit_seg_modeling import VisionTransformer as ViT_seg
 from TransUnet.vit_seg_modeling import VisionTransformerMultitask as ViT_seg_MT
+from TransUnet.vit_seg_modeling import VisionTransformerMultitaskEM as ViT_seg_MTem
 from TransUnet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
-from test import test_single, get_image_list
+from CLTR.build_model import buildCLTR
+from test import test_single, get_image_list, test_single_crop
 from test_mc3serousv5 import test_single_mc, test_single_reg
 from test_reg3serousv5mt import test_multiple_reg
 import pandas as pd
@@ -45,7 +47,6 @@ def seed_everything(seed):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
 
 def check_input(dataloaders, titles=["Input", 'Target']):
     train_loader = dataloaders['train']
@@ -218,11 +219,17 @@ def main(cfg):
             model.load_from(weights=np.load("TransUnet/R50+ViT-B_16.npz"))
         
         elif model_type == 'TransUnet':
-            train_dataset = Data_Binary(
-                train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
-            val_dataset = Data_Binary(
-                val_path, ch, anydepth, False, input_size=input_size)
-            
+            if cfg['dataset_config']['random_crop']:
+                train_dataset = DataRandomCrop(
+                    train_path, ch, anydepth, cfg['dataset_config']['augmentation'], True, 256)
+                val_dataset = DataRandomCrop(
+                    val_path, ch, anydepth, False, False, 256)
+            else:
+                train_dataset = Data_Binary(
+                    train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
+                val_dataset = Data_Binary(
+                    val_path, ch, anydepth, False, input_size=input_size)
+                
             config_vit = CONFIGS_ViT_seg["R50-ViT-B_16"]
             config_vit.n_classes = cfg['model_config']['num_class']
             config_vit.n_skip = 3
@@ -256,12 +263,34 @@ def main(cfg):
             config_vit.patches.grid = (int(input_size[1] / 16), int(input_size[1] / 16))
             model = ViT_seg_MT(config_vit, img_size=input_size[0], num_classes=cfg['model_config']['num_class']).cuda()
             model.load_from(weights=np.load("TransUnet/R50+ViT-B_16.npz"))
-                                    
+                          
         elif model_type == 'attention':
             train_dataset = Data_Binary(
                 train_path, ch, anydepth, cfg['dataset_config']['augmentation'], input_size=input_size)
             val_dataset = Data_Binary(
                 val_path, ch, anydepth, False, input_size=input_size)
+        elif model_type == 'CLTR':
+
+            with open("CLTR/CLTRconfig.yml", "r") as f:
+                args = yaml.safe_load(f)
+            train_dataset = DataPointReg(train_path, tsv_files, ch, anydepth, cfg['dataset_config']['augmentation'], args['crop_size'], args['num_knn'], True)
+            val_dataset = DataPointReg(val_path, tsv_files, ch, anydepth, False, args['crop_size'], args['num_knn'], False)
+            model, criterion, postprocessors = buildCLTR(args)
+            
+            def collate_wrapper(batch):
+                targets = []
+                imgs = []
+                for item in batch:
+
+                    for i in range(0, len(item[0])):
+                        imgs.append(item[0][i])
+
+                    for i in range(0, len(item[1])):
+                        targets.append(item[1][i])
+                return torch.stack(imgs, 0), targets
+            
+            loss_function = criterion
+            
         else:
             raise ValueError('Invalid model_type "%s"' % model_type)
 
@@ -287,11 +316,22 @@ def main(cfg):
         #     shuffle=True, num_workers=4, pin_memory=True)
         # val_loader = DataLoader(val_dataset, batch_size,
         #                         shuffle=False, num_workers=4, pin_memory=True)
-        train_loader = DataLoader(
-            train_dataset, batch_size,
-            shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size,
-                                shuffle=False)
+        if model_type == 'CLTR':
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                drop_last=False,
+                collate_fn=collate_wrapper,
+                shuffle=True
+            )
+            val_loader = DataLoader(val_dataset, 1,
+                                    shuffle=False)
+        else:
+            train_loader = DataLoader(
+                train_dataset, batch_size,
+                shuffle=True)
+            val_loader = DataLoader(val_dataset, 1,
+                                    shuffle=False)
         dataloaders = {
             'train': train_loader,
             'val': val_loader
@@ -318,8 +358,10 @@ def main(cfg):
         if test_image_list:
             print('Testing best model:')
             if model_type in ['attention', 'single', 'TransUnet']:
-                #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
-                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, tsv_files, output_save_dir)
+                #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, tsv_files, output_save_dir)
+                #currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, tsv_files, output_save_dir)
+                currResultsDict = test_single_crop(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], 256, test_image_list, output_save_dir)
+
             elif model_type in ['multi_task_regTU','multi_task_reg', 'fourier1']:
                 currResultsDict = test_multiple_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
             elif model_type in ['regression','regression_t']:

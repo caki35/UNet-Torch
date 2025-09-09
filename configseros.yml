@@ -3,33 +3,34 @@ model_config:
   initial_filter_size: [64]
   kernel: [3]
   drop_out_rate: [0.2]
-  input_size: [384, 384]    #[1536, 1536] #h, w 
+  input_size: [256, 256]    #[1536, 1536] #h, w 
   channel: 3
-  num_class: 3
+  num_class: 1
   model_type: TransUnet #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
   dropout: False
   anydepth: False
 train_config:
-  loss: MyTopoLoss1
-  accuracy: MyTopoLoss1
+  loss: dice_bce
+  accuracy: dice_bce
   optimizer: Adam #SGD
   lr_rate: [0.0005]
   adaptive_lr: False
   weight_decay: [0.0001]
-  batch_size: [1]
-  epochs: 15
+  batch_size: [2]
+  epochs: 20
   early_stop: 30
   num_workers: 20
-  seed:  [11, 17]
+  seed:  [11, 15]
   use_cuda: True
 dataset_config:
-  train_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/train/']
-  val_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/val/']
-  test_path: ['/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/test/']
+  train_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1//train/']
+  val_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1/val/']
+  test_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/test1/']
   dot_annotation_path: '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'
   augmentation: True
-  save_dir: topoDeneme2
+  save_dir: newDataset
   class_names: ['background','other cell','immune cell']
+  random_crop: True
 resume:
   flag: False
   path: hd_exp1_123_bs/models/last_epoch.pt
