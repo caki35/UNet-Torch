@@ -5,13 +5,13 @@ model_config:
   drop_out_rate: [0.2]
   input_size: [256, 256]    #[1536, 1536] #h, w 
   channel: 3
-  num_class: 1
+  num_class: 3
   model_type: TransUnet #multi_task, attention, fourier1, fourier1_2, single, TransUnet, regression, regression_t, multi_task_reg, multi_task_regTU
   dropout: False
   anydepth: False
 train_config:
-  loss: dice_bce
-  accuracy: dice_bce
+  loss: dice_bce_mc
+  accuracy: dice_bce_mc
   optimizer: Adam #SGD
   lr_rate: [0.0005]
   adaptive_lr: False
@@ -23,7 +23,7 @@ train_config:
   seed:  [11, 15]
   use_cuda: True
 dataset_config:
-  train_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1//train/']
+  train_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1/train/']
   val_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1/val/']
   test_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/test1/']
   dot_annotation_path: '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'

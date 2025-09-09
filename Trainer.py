@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch import optim
 import torch.nn.functional as F
-from myTopoLoss import save_sill 
 class Trainer():
     def __init__(self, model, model_type, dtype, device, output_save_dir, dataloaders, batch_size, optimizer, patience, num_epochs, loss_function, accuracy_metric,  lr_scheduler=None, start_epoch=1):
         self.model = model
