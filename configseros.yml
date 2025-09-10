@@ -30,7 +30,7 @@ dataset_config:
   augmentation: True
   save_dir: newDataset
   class_names: ['background','other cell','immune cell']
-  random_crop: True
+  random_crop: False
 resume:
   flag: False
   path: hd_exp1_123_bs/models/last_epoch.pt

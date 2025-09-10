@@ -622,42 +622,10 @@ class Data_Binary(Dataset):
         self.anydepth = anydepth
         self.augmentation = augmentation
         self.Counter = 0
-        # if self.augmentation:
-        #     # Define augmentation pipeline IMGAUG.
-        #     self.aug = iaa.Sequential(iaa.SomeOf((0,2),[
-        #         iaa.Affine(rotate=(-40, 40), mode="constant",cval=255),
-        #         iaa.Affine(translate_px={"x": (-40, 40), "y": (-40, 40)}, mode="constant",cval=255),
-        #         iaa.Fliplr(),
-        #         iaa.Flipud(),
-        #         iaa.OneOf([iaa.Affine(rotate=90),
-        #         iaa.Affine(rotate=180),
-        #         iaa.Affine(rotate=270)]),
-        #         iaa.OneOf([iaa.GaussianBlur(sigma=(0.1, 0.25)),
-        #         iaa.MedianBlur(k=(3)),
-        #         iaa.Sharpen(alpha=(0.0, 0.3), lightness=(0.8, 1.2))])
-        #     ]))
-
-        #     # Define augmentation pipeline IMGAUG.
-        #     self.transforms_dict = {
-        #         tio.transforms.RandomAffine(scales=(0.9, 1.2), degrees=40): 0.1,
-        #         tio.transforms.RandomElasticDeformation(num_control_points=7, locked_borders=2): 0.1,
-        #         tio.transforms.RandomAnisotropy(axes=(1, 2), downsampling=(2, 4)): 0.1,
-        #         tio.transforms.RandomBlur(): 0.1,
-        #         tio.transforms.RandomGhosting(): 0.1,
-        #         tio.transforms.RandomSpike(num_spikes = 1, intensity= (1, 2)): 0.1,
-        #         tio.transforms.RandomBiasField(coefficients = 0.2, order= 3): 0.1,
-        #         tio.RandomGamma(log_gamma=0.1): 0.1,
-        #     }
-        #     self._colorJitter = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.01)
 
         self.height = input_size[0]
         self.width = input_size[1]
-        # self.transform = transforms.Compose(
-        #                            [RandomGenerator(output_size=[input_size[0], input_size[1]])])
-        # self.normalizeTorch = transforms.Compose([
-        # transforms.ToTensor(),
-        # transforms.Normalize([0.5], [0.5])
-        # ])
+
         if self.channel == -2:
             REFERENCE_PATH = '/home/ocaki13/UNet-Torch/color_normalizer.npy'
             REF = np.load(REFERENCE_PATH)
@@ -666,98 +634,80 @@ class Data_Binary(Dataset):
             self.NORMALIZER.fit(REF)
         
     def transform(self, sample):
-        image, label = sample['image'], sample['label']
+        img_unnormalized, label, gt_dot_map = sample['image'], sample['label'], sample['gt_dot']
         if self.augmentation:
-            sample_list = [image, label]
+            sample_list = [img_unnormalized, label, gt_dot_map]
             if random.random() > 0.5:
                 sample_list = random_rot_flip(sample_list)
             elif random.random() > 0.5:
                 sample_list = random_rotate(sample_list)
-            image, label = sample_list
-            
-            # if random.random() > 0.5:
-            #     sample = RadiologyAugmentationTIO(sample, self.transforms_dict)
-            #     image, label = sample['image'], sample['label']
-            #     cv2.imwrite(os.path.join('deneme/','torchio'+str(self.Counter)+'.png'),image)
-            #     cv2.imwrite(os.path.join('deneme/','torchio'+str(self.Counter)+'_label.png'),label)
-                
-                
-            # if random.random() > 0.25:
-                
-            #     #image_org, label_org = sample['image'], sample['label']
-                            
-            #     # sample = PathologyAugmentationAug(sample, self.aug)
-            #     # image, label = sample['image'], sample['label']
-            #     # image = np.array(self._colorJitter(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))))
-            #     # image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            img_unnormalized, label, gt_dot_map = sample_list
 
-            #     # ##### DEBUG ######            
-            #     # # Create a vertical line as a separator
-            #     # separator_width = 10
-            #     # separator = np.zeros((image.shape[0], separator_width, 3), dtype=np.uint8) 
-
-            #     # # Concatenate the images with the separator
-            #     # concatenated_image = np.hstack((image_org, separator, image))
-            #     # separator = np.zeros((image.shape[0], separator_width), dtype=np.uint8) 
-            #     # concatenated_label = np.hstack((label_org, separator, label))
-
-            #     # # Save the concatenated image
-            #     # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug.png'),concatenated_image)
-            #     # cv2.imwrite(os.path.join('augload/','imgaug'+str(self.Counter)+'aug_label.png'),concatenated_label)
-
-
-        if len(image.shape)==2:
-            y, x = image.shape
+        if len(img_unnormalized.shape)==2:
+            y, x = img_unnormalized.shape
             if x != self.width or y != self.height:
-                image = zoom(image, (self.width / x, self.height / y), order=3)  # why not 3?
+                img_unnormalized = zoom(img_unnormalized, (self.width / x, self.height / y), order=3)  # why not 3?
                 label = zoom(label, (self.width / x, self.height / y), order=0)
+                gt_dot_map = zoom(gt_dot_map, (self.width / x, self.height / y), order=0)
+
         else:
-            y, x, c = image.shape
+            y, x, c = img_unnormalized.shape
             if x != self.width or y != self.height:
-                image = zoom(image, (self.width / x, self.height / y,1), order=3)  # why not 3?
+                img_unnormalized = zoom(img_unnormalized, (self.width / x, self.height / y,1), order=3)  # why not 3?
                 label = zoom(label, (self.width / x, self.height / y), order=0)
+                gt_dot_map = zoom(gt_dot_map, (self.width / x, self.height / y), order=0)
+
             
         #z normalizization
-        mean3d = np.mean(image, axis=(0,1))
-        std3d = np.std(image, axis=(0,1))
-        image = (image-mean3d)/std3d
+        mean3d = np.mean(img_unnormalized, axis=(0,1))
+        std3d = np.std(img_unnormalized, axis=(0,1))
+        image = (img_unnormalized-mean3d)/std3d
         if len(image.shape)==2:
             image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
+            img_unnormalized = torch.from_numpy(img_unnormalized.astype(np.float32)).unsqueeze(0)
         else:  
             # HWC to CHW, BGR to RGB (for three channel)
             image = image.transpose((2, 0, 1))[::-1]
             image = torch.from_numpy(image.astype(np.float32))
+            
+            # HWC to CHW, BGR to RGB (for three channel)
+            img_unnormalized = img_unnormalized.transpose((2, 0, 1))[::-1]
+            img_unnormalized = torch.from_numpy(img_unnormalized.astype(np.float32))
 
         #image = self.normalizeTorch(image.astype(np.float32))
         label = torch.from_numpy(label.astype(np.float32))
-        sample = {'image': image, 'label': label.long()}
+        sample = {'image': image, 'label': label.long(), 'gt_dot':gt_dot_map, 'img_org':img_unnormalized}
         return sample
     
     def __getitem__(self, idx):
         img_path = self.image_list[idx]
         if self.channel==1:
             if self.anydepth: 
-                image = cv2.imread(img_path, -1)
+                img_org = cv2.imread(img_path, -1)
             else:
-                image = cv2.imread(img_path, 0)
+                img_org = cv2.imread(img_path, 0)
         elif self.channel==3:
-            image = cv2.imread(img_path)
+            img_org = cv2.imread(img_path)
         elif self.channel==-1:
             #image = cv2.imread(img_path)
             im_rgb = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
             rihc_hed = rgb2hed(im_rgb)
-            image = rihc_hed[:,:,0]
+            img_org = rihc_hed[:,:,0]
         elif self.channel==-2:
             im_rgb = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
-            image = self.NORMALIZER.transform(im_rgb)
+            img_org = self.NORMALIZER.transform(im_rgb)
 
-        label_path =  img_path[:img_path.rfind('.')] + '_label.png'
+        label_path =  img_path.replace('.png', '_label_mc.png')
+        gt_path =  img_path.replace('.png', '_gt_dot.png') 
+
         label = cv2.imread(label_path, 0)
-        sample = {'image': image, 'label': label}
+        gt_dot = cv2.imread(gt_path, 0)
+        
+        sample = {'image': img_org, 'label': label, 'gt_dot':gt_dot}
         sample = self.transform(sample)
 
         return sample['image'], sample['label']
-
+    
     def __len__(self):
         return len(self.image_list)
 
@@ -772,7 +722,7 @@ class Data_Binary(Dataset):
         for current_path in path:
             for maindir, subdir, file_name_list in os.walk(current_path):
                 for filename in file_name_list:
-                    if '_label' in filename:
+                    if '_label' in filename or '_gt_dot' in filename:
                         continue
                     apath = os.path.join(maindir, filename)
                     ext = os.path.splitext(apath)[1]
