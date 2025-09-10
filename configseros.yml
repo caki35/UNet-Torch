@@ -17,7 +17,7 @@ train_config:
   adaptive_lr: False
   weight_decay: [0.0001]
   batch_size: [2]
-  epochs: 20
+  epochs: 15
   early_stop: 30
   num_workers: 20
   seed:  [11, 15]
@@ -25,7 +25,7 @@ train_config:
 dataset_config:
   train_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1/train/']
   val_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1/val/']
-  test_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/test1/']
+  test_path: ['/home/ocaki13/projects/cellDatasets/processed/seros_1536/test1']
   dot_annotation_path: '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'
   augmentation: True
   save_dir: newDataset

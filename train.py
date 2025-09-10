@@ -359,8 +359,8 @@ def main(cfg):
             print('Testing best model:')
             if model_type in ['attention', 'single', 'TransUnet']:
                 #currResultsDict = test_single(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, tsv_files, output_save_dir)
-                #currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, tsv_files, output_save_dir)
-                currResultsDict = test_single_crop(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], 256, test_image_list, output_save_dir)
+                currResultsDict = test_single_mc(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)
+                #currResultsDict = test_single_crop(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], 256, test_image_list, output_save_dir)
 
             elif model_type in ['multi_task_regTU','multi_task_reg', 'fourier1']:
                 currResultsDict = test_multiple_reg(trainer.model, device, input_size, ch, cfg['model_config']['num_class'], test_image_list, output_save_dir)

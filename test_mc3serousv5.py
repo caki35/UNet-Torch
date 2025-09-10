@@ -88,11 +88,12 @@ def get_image_list(path):
     image_names = []
     for maindir, subdir, file_name_list in os.walk(path):
         for filename in file_name_list:
-            if '_label' not in filename:
-                apath = os.path.join(maindir, filename)
-                ext = os.path.splitext(apath)[1]
-                if ext in image_ext:
-                    image_names.append(apath)
+            if '_label' in filename or '_gt_dot' in filename:
+                continue
+            apath = os.path.join(maindir, filename)
+            ext = os.path.splitext(apath)[1]
+            if ext in image_ext:
+                image_names.append(apath)
     return natural_sort(image_names)
 
 
@@ -100,13 +101,13 @@ def preprocess(img_org, input_size):
     if len(img_org.shape)==2:
         imgHeight, imgWidth = img_org.shape
         if imgHeight != input_size[0] or imgWidth != input_size[1]:
-            img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth), order=3)  
+            img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth), order=3)
         else:
             img_input = img_org
     else:
         imgHeight, imgWidth, _ = img_org.shape
         if imgHeight != input_size[0] or imgWidth != input_size[1]:
-            img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth, 1), order=3)  
+            img_input = zoom(img_org, (input_size[0] / imgHeight, input_size[1] / imgWidth, 1), order=3)   
         else:
             img_input = img_org
         
@@ -396,7 +397,7 @@ class Results2Class:
         for i in self.classDict:
             self.classRes[i] = {'tp':0,'fp':0,'fn':0,'tn':0}
         self.save_dir = save_dir
-        self.sigma_list=[5, 20]
+        self.sigma_list=[10, 20]
         self.sigma_thresh_list=list(np.arange(0.5,1, 0.05))
         self.arr_prec_immune=np.zeros((len(self.sigma_list), len(self.sigma_thresh_list)))
         self.arr_recall_immune=np.zeros((len(self.sigma_list), len(self.sigma_thresh_list)))
@@ -477,10 +478,12 @@ class Results2Class:
         plt.close(fig)
         
 
-    def compareImages(self, img_org, gtImg, predImg, tsv_path):
-
-        # create dot image from ground-truth csv 
-        gt_dot_other, gt_dot_immune = create_label_coordinates(tsv_path)
+    def compareImages(self, img_org, gtImg, predImg, gt_dot):
+        gt_dot_other = np.zeros_like(gt_dot)
+        gt_dot_other[gt_dot==1] = 1
+        gt_dot_immune = np.zeros_like(gt_dot)
+        gt_dot_immune[gt_dot==2] = 1
+                
         # calculate gold counts
         cellCountGt = np.sum(gt_dot_other)
         immuneCountGt = np.sum(gt_dot_immune)
@@ -853,11 +856,11 @@ class Results2Class:
         return self.performace_results
 
 
-def test_single_mc(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir):
+def test_single_mc(model, device, input_size, ch, Num_Class, image_list, save_dir):
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     if Num_Class == 3:
-        res = Results2Class(save_dir, False)
+        res = Results2Class(save_dir, True)
     elif Num_Class == 4:
         res = Results3Class(save_dir)
     else:
@@ -867,13 +870,6 @@ def test_single_mc(model, device, input_size, ch, Num_Class, image_list, tsv_fil
     for img_path in tqdm(image_list):
         image_name = img_path.split('/')[-1]
         img_org = cv2.imread(img_path)
-        
-        # im_rgb = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
-        # img_org = NORMALIZER.transform(im_rgb)
-        
-        # ihc_rgb = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) 
-        # rihc_hed = rgb2hed(ihc_rgb)
-        # img_org = rihc_hed[:,:,0]
 
         img_input = preprocess(img_org, input_size)
         imgHeight, imgWidth = img_org.shape[:2]
@@ -891,18 +887,14 @@ def test_single_mc(model, device, input_size, ch, Num_Class, image_list, tsv_fil
         pred = np.uint8(pred)
 
         #cv2.imwrite(os.path.join(save_dir, image_name+'_pred.png'),  pred)
+        label_path =  img_path.replace('.png', '_label_mc.png')
+        gt_path =  img_path.replace('.png', '_gt_dot_mc.png') 
 
-
-        # read gt mask
-        mask_path = img_path[:img_path.rfind('.')] + '_label_mc.png'
-        mask = cv2.imread(mask_path, 0)
-        
-        img_name = img_path.split('/')[-1].split('.png')[0]
-        tsv_path = tsv_files[img_name]
+        label = cv2.imread(label_path, 0)
+        gt_dot = cv2.imread(gt_path, 0)
         
         res.imageNames.append(image_name)
-
-        res.compareImages(img_org, mask, pred, tsv_path)
+        res.compareImages(img_org, label, pred, gt_dot)
     res.save()    
     resDict = res.getResults()
     return resDict
@@ -1355,15 +1347,13 @@ def getPointsFromTsv(tsv_path):
 def main():
     
     save_dir = 'denemeMC1'
-    test_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/fold1/test/'
-    tsv_path = '/home/ocaki13/projects/serous/Datav2/processed/datasetv2_768/tsv/'
-    tsv_files = getPointsFromTsv(tsv_path)
+    test_path = '/home/ocaki13/projects/cellDatasets/processed/seros_1536/fold1/test'
     
     image_list = get_image_list(test_path)
     modelType = 'TransUnet' #Unet
-    input_size = (768,768)
+    input_size = (256,256)
     use_cuda = True
-    model_path = '/media/ocaki13/12F63DCFF63DB437/TopoRes/base/seros_exp5_singleClass_dicebce_fold1/seros_exp5_singleClass_dicebce_fold1_seed11/models/best.pt'
+    model_path = '/home/ocaki13/UNet-Torch/newDataset/newDataset_seed11/models/best.pt'
     device = "cuda:0"
     dtype = torch.cuda.FloatTensor
     Num_Class = 3
@@ -1387,7 +1377,7 @@ def main():
     model.eval()
 
 
-    resDict = test_single_mc(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
+    resDict = test_single_mc(model, device, input_size, ch, Num_Class, image_list, save_dir)
     #resDict = test_single_reg(model, device, input_size, ch, Num_Class, image_list, tsv_files, save_dir)
 
 
